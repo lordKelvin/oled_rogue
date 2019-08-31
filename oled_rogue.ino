@@ -23,7 +23,7 @@ MyButtons buttons_previous;
 MyButtons buttons_states = {false, false, false, false, false, false, false, false};
 
 char player_clear = '.';
-int x = 2, y = 2;
+int x, y;
 
 char level[8][26];
 char view[8][26];
@@ -86,6 +86,25 @@ void draw(int n) {
   u8g.drawStr(0, n * 8 + 8, view[n]);
 }
 
+void newlevel()
+{
+  for(int y = 0; y < LEVEL_V; y++)
+  {
+    for(int x = 0; x < LEVEL_H; x++)
+    {
+      level[y][x] = (random(10) < 4 ? '#' : '.');
+    }
+  }
+  simulation_step();
+  simulation_step();
+  x = random(LEVEL_H - 4) + 2;
+  y = random(LEVEL_V - 4) + 2;
+  level[random(LEVEL_V - 4) + 2][random(LEVEL_H - 4) + 2] = '>';
+  player_clear = level[y][x];
+  level[y][x] = '@';
+  show();
+}
+
 void setup(void) {
   randomSeed(analogRead(0));
   pinMode(D2, INPUT_PULLUP);
@@ -96,22 +115,10 @@ void setup(void) {
   pinMode(D7, INPUT_PULLUP);
   pinMode(D8, INPUT_PULLUP);
   pinMode(D9, INPUT_PULLUP);
-  for(int y = 0; y < LEVEL_V; y++)
-  {
-    for(int x = 0; x < LEVEL_H; x++)
-    {
-      level[y][x] = (random(10) < 4 ? '#' : '.');
-    }
-  }
-  simulation_step();
-  simulation_step();
-  player_clear = level[y][x];
-  level[y][x] = '@';
-  show();
+  newlevel();
 }
 
-void show()
-{
+void show(){
   for(int py = max(y - 1, 0); py < min(y + 2, LEVEL_V); py++)
   {
     for(int px = max(x - 1, 0); px < min(x + 2, LEVEL_H); px++)
@@ -129,7 +136,10 @@ void move(int dx, int dy)
     {
     case '#':
       break;
-    case '.': case '<': case '>': case '/':
+    case '>':
+      newlevel();
+      break;
+    case '.':
       level[y][x] = player_clear;
       x += dx;
       y += dy;
