@@ -35,10 +35,8 @@ char view[8][26];
 int count_neighbours(int x, int y)
 {
   int count = 0;
-  if(y == 0) count += 3;
-  if(y == LEVEL_V - 1) count += 3;
-  if(x == 0) count += 3;
-  if(x == LEVEL_H - 1) count += 3;
+  if(y == 0 || y == LEVEL_V - 1) count += 3;
+  if(x == 0 || x == LEVEL_H - 1) count += 3;
   for(int py = max(y - 1, 0); py < min(y + 2, LEVEL_V); py++)
   {
     for(int px = max(x - 1, 0); px < min(x + 2, LEVEL_H); px++)
@@ -70,12 +68,8 @@ void simulation_step(void)
 
   for(int y = 0; y < LEVEL_V; y++)
   {
-    for(int x = 0; x < LEVEL_H; x++)
-    {
-      level[y][x] = view[y][x];
-      view[y][x] = ' ';
-    }
-    level[y][LEVEL_H] = view[y][LEVEL_H] = '\0';
+    memcpy(level[y], view[y], LEVEL_H + 1);
+    memset(view[y], ' ', LEVEL_H);
   }
 }
 
@@ -94,6 +88,7 @@ void newlevel(void)
     {
       level[y][x] = (random(10) < 4 ? '#' : '.');
     }
+    level[y][LEVEL_H] = '\0';
   }
   simulation_step();
   simulation_step();
@@ -108,14 +103,8 @@ void newlevel(void)
 void setup(void)
 {
   randomSeed(analogRead(0));
-  DDRD &= ~bit(D2); PORTD |= bit(D2); // set digital pin 2 as INPUT_PULLUP
-  DDRD &= ~bit(D3); PORTD |= bit(D3); // set digital pin 3 as INPUT_PULLUP
-  DDRD &= ~bit(D4); PORTD |= bit(D4); // set digital pin 4 as INPUT_PULLUP
-  DDRD &= ~bit(D5); PORTD |= bit(D5); // set digital pin 5 as INPUT_PULLUP
-  DDRD &= ~bit(D6); PORTD |= bit(D6); // set digital pin 6 as INPUT_PULLUP
-  DDRD &= ~bit(D7); PORTD |= bit(D7); // set digital pin 7 as INPUT_PULLUP
-  DDRB &= ~bit(0); PORTB |= bit(0); // set digital pin 8 as INPUT_PULLUP
-  DDRB &= ~bit(1); PORTB |= bit(1); // set digital pin 9 as INPUT_PULLUP
+  DDRD &= ~0b11111100; PORTD |= 0b11111100; // set digital pin 2-7 as INPUT_PULLUP
+  DDRB &= ~0b00000011; PORTB |= 0b00000011; // set digital pin 8-9 as INPUT_PULLUP
   newlevel();
 }
 
@@ -136,8 +125,8 @@ void move(int dx, int dy)
   {
     switch(level[y + dy][x + dx])
     {
-    case '#':
-      break;
+//    case '#':
+//      break;
     case '>':
       newlevel();
       break;
