@@ -50,7 +50,7 @@ int count_neighbours(int x, int y)
   return count;
 }
 
-void simulation_step()
+void simulation_step(void)
 {
   for(int y = 0; y < LEVEL_V; y++)
   {
@@ -86,7 +86,7 @@ void draw(int n) {
   u8g.drawStr(0, n * 8 + 8, view[n]);
 }
 
-void newlevel()
+void newlevel(void)
 {
   for(int y = 0; y < LEVEL_V; y++)
   {
@@ -105,20 +105,22 @@ void newlevel()
   show();
 }
 
-void setup(void) {
+void setup(void)
+{
   randomSeed(analogRead(0));
-  pinMode(D2, INPUT_PULLUP);
-  pinMode(D3, INPUT_PULLUP);
-  pinMode(D4, INPUT_PULLUP);
-  pinMode(D5, INPUT_PULLUP);
-  pinMode(D6, INPUT_PULLUP);
-  pinMode(D7, INPUT_PULLUP);
-  pinMode(D8, INPUT_PULLUP);
-  pinMode(D9, INPUT_PULLUP);
+  DDRD &= ~bit(D2); PORTD |= bit(D2); // set digital pin 2 as INPUT_PULLUP
+  DDRD &= ~bit(D3); PORTD |= bit(D3); // set digital pin 3 as INPUT_PULLUP
+  DDRD &= ~bit(D4); PORTD |= bit(D4); // set digital pin 4 as INPUT_PULLUP
+  DDRD &= ~bit(D5); PORTD |= bit(D5); // set digital pin 5 as INPUT_PULLUP
+  DDRD &= ~bit(D6); PORTD |= bit(D6); // set digital pin 6 as INPUT_PULLUP
+  DDRD &= ~bit(D7); PORTD |= bit(D7); // set digital pin 7 as INPUT_PULLUP
+  DDRB &= ~bit(0); PORTB |= bit(0); // set digital pin 8 as INPUT_PULLUP
+  DDRB &= ~bit(1); PORTB |= bit(1); // set digital pin 9 as INPUT_PULLUP
   newlevel();
 }
 
-void show(){
+void show(void)
+{
   for(int py = max(y - 1, 0); py < min(y + 2, LEVEL_V); py++)
   {
     for(int px = max(x - 1, 0); px < min(x + 2, LEVEL_H); px++)
@@ -152,17 +154,20 @@ void move(int dx, int dy)
 }
 
 void loop(void) {
-  buttons_states.d2 = (digitalRead(D2) == LOW);
-  buttons_states.d3 = (digitalRead(D3) == LOW);
-  buttons_states.d4 = (digitalRead(D4) == LOW);
-  buttons_states.d5 = (digitalRead(D5) == LOW);
-  buttons_states.d6 = (digitalRead(D6) == LOW);
-  buttons_states.d7 = (digitalRead(D7) == LOW);
-  buttons_states.d8 = (digitalRead(D8) == LOW);
-  buttons_states.d9 = (digitalRead(D9) == LOW);
+  // https://robotic-controls.com/learn/optimized-multiple-pin-reads
+  // https://www.arduino.cc/en/Reference/PortManipulation
+  // https://gist.github.com/nadavmatalon/08e4ab2ca1d0958c551a89ce3cb36d90
+  buttons_states.d2 = ((PIND & 0b00000100) == 0);
+  buttons_states.d3 = ((PIND & 0b00001000) == 0);
+  buttons_states.d4 = ((PIND & 0b00010000) == 0);
+  buttons_states.d5 = ((PIND & 0b00100000) == 0);
+  buttons_states.d6 = ((PIND & 0b01000000) == 0);
+  buttons_states.d7 = ((PIND & 0b10000000) == 0);
+  buttons_states.d8 = ((PINB & 0b00000001) == 0);
+  buttons_states.d9 = ((PINB & 0b00000010) == 0);
 
   if(buttons_states.d2 && !buttons_previous.d2) {
-     // a
+    // a
   }
   if(buttons_states.d3 && !buttons_previous.d3) {
      // b
