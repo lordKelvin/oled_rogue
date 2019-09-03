@@ -25,12 +25,11 @@ MyButtons buttons_states = {false, false, false, false, false, false, false, fal
 char player_clear = '.';
 int x, y;
 
-char level[8][26];
-char view[8][26];
-
 #define LEVEL_V 8
 #define LEVEL_H 25
 
+char level[LEVEL_V][LEVEL_H + 1];
+char view[LEVEL_V][LEVEL_H + 1];
 
 int count_neighbours(int x, int y)
 {
@@ -73,9 +72,10 @@ void simulation_step(void)
   }
 }
 
-U8GLIB_SH1106_128X64 u8g(U8G_I2C_OPT_DEV_0|U8G_I2C_OPT_FAST);                     // I2C / TWI 1.3
+U8GLIB_SH1106_128X64 u8g(U8G_I2C_OPT_DEV_0 | U8G_I2C_OPT_FAST); // I2C / TWI 1.3
 
-void draw(int n) {
+void draw(int n)
+{
   u8g.setFont(u8g_font_5x8);
   u8g.drawStr(0, n * 8 + 8, view[n]);
 }
