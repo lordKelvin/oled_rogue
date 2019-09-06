@@ -34,18 +34,34 @@ char view[LEVEL_V][LEVEL_H + 1];
 int count_neighbours(int x, int y)
 {
   int count = 0;
-  if(y == 0 || y == LEVEL_V - 1) count += 3;
-  if(x == 0 || x == LEVEL_H - 1) count += 3;
-  for(int py = max(y - 1, 0); py < min(y + 2, LEVEL_V); py++)
-  {
-    for(int px = max(x - 1, 0); px < min(x + 2, LEVEL_H); px++)
-    {
+  int minx = x, maxx = x, miny = y, maxy = y;
+
+  if(x == 0)
+    count += 3;
+  else
+    minx = x - 1;
+  if(x == LEVEL_H - 1)
+    count += 3;
+  else
+    maxx = x + 1;
+
+  if(y == 0)
+    count += 3;
+  else
+    miny = y - 1;
+  if(y == LEVEL_V - 1)
+    count += 3;
+  else
+    maxy = y + 1;
+
+  for(int py = miny; py <= maxy; py++)
+    for(int px = minx; px < maxx; px++)
       if(level[py][px] == '#')
         count++;
-    }
-  }
+
   return count;
 }
+
 
 void simulation_step(void)
 {
@@ -82,11 +98,12 @@ void draw(int n)
 
 void newlevel(void)
 {
+  int r = random(LEVEL_V - 4) + 2;
   for(int y = 0; y < LEVEL_V; y++)
   {
     for(int x = 0; x < LEVEL_H; x++)
     {
-      level[y][x] = (random(10) < 4 ? '#' : '.');
+      level[y][x] = ((y != r && random(10) < 4) ? '#' : '.');
     }
     level[y][LEVEL_H] = '\0';
   }
@@ -156,7 +173,10 @@ void loop(void) {
   buttons_states.d9 = ((PINB & 0b00000010) == 0);
 
   if(buttons_states.d2 && !buttons_previous.d2) {
-    // a
+    for(int y = 0; y < LEVEL_V; y++)
+    {
+      memcpy(view[y], level[y], LEVEL_H);
+    }
   }
   if(buttons_states.d3 && !buttons_previous.d3) {
      // b
