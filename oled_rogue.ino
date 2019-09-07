@@ -54,6 +54,9 @@ int count_neighbours(int x, int y)
   else
     maxy = y + 1;
 
+  if(count == 6)
+    count--;
+
   for(int py = miny; py <= maxy; py++)
     for(int px = minx; px < maxx; px++)
       if(level[py][px] == '#')
@@ -103,9 +106,10 @@ void newlevel(void)
   {
     for(int x = 0; x < LEVEL_H; x++)
     {
+      // level[y][x] = ((y != r && random(11) < 4) ? '#' : '.');
       level[y][x] = ((y != r && random(10) < 4) ? '#' : '.');
     }
-    level[y][LEVEL_H] = '\0';
+    view[y][LEVEL_H] = '\0';
   }
   simulation_step();
   simulation_step();
@@ -174,9 +178,7 @@ void loop(void) {
 
   if(buttons_states.d2 && !buttons_previous.d2) {
     for(int y = 0; y < LEVEL_V; y++)
-    {
       memcpy(view[y], level[y], LEVEL_H);
-    }
   }
   if(buttons_states.d3 && !buttons_previous.d3) {
      // b
