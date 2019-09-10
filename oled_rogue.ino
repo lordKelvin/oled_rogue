@@ -99,23 +99,101 @@ void draw(int n)
   u8g.drawStr(0, n * 8 + 8, view[n]);
 }
 
+void eller()
+{
+    // For a set of cells i_1, i_2, ..., i_k from left to right that are connected in the previous row R[i_1] = i_2, R[i_2] = i_3, ... and R[i_k] = i_1. Similarly for the left
+    int L[LEVEL_H / 2], R[LEVEL_H / 2];
+
+    // At the top each cell is connected only to itself
+    for(int c = 0; c < LEVEL_H / 2; c++)
+        L[c] = R[c] = c;
+
+    for(int r = 0; r < LEVEL_V; r++)
+    {
+        for(int c = 0; c < LEVEL_H; c++)
+        {
+            if(r % 2 == 1 || c % 2 == 0)
+                level[r][c] = '#';
+            else
+                level[r][c] = '.';
+        }
+        level[r][LEVEL_H] = '\0';
+        memset(view[r], ' ', LEVEL_H);
+        view[r][LEVEL_H] = '\0';
+    }
+
+    // Generate each row of the maze excluding the last
+    for(int r = 0; r < LEVEL_V / 2 - 1; r++)
+    {
+        for(int c = 0; c < LEVEL_H / 2; c++)
+        {
+            // Should we connect this cell and its neighbour to the right?
+            if(c != LEVEL_H / 2 - 1 && c + 1 != R[c] && random(2) == 0)
+            {
+                R[L[c + 1]] = R[c]; // Link L[c + 1] to R[c]
+                L[R[c]] = L[c + 1];
+                R[c] = c + 1; // Link c to c + 1
+                L[c + 1] = c;
+
+                level[r * 2][c * 2 + 2] = '.';
+            }
+
+            // Should we connect this cell and its neighbour below?
+            if(c != R[c] && random(2) == 0)
+            {
+                R[L[c]] = R[c]; // Link L[c] to R[c]
+                L[R[c]] = L[c];
+                R[c] = c; // Link c to c
+                L[c] = c;
+            } else {
+                level[r * 2 + 1][c * 2 + 1] = '.';
+            }
+        }
+    }
+
+    // Handle the last row to guarantee the maze is connected
+    for(int c = 0; c < LEVEL_H / 2; c++)
+    {
+        if(c != LEVEL_H / 2 - 1 && c + 1 != R[c] && (c == R[c] || random(2) == 0))
+        {
+            R[L[c + 1]] = R[c]; // Link L[c + 1] to R[c]
+            L[R[c]] = L[c + 1];
+            R[c] = c + 1; // Link c to c + 1
+            L[c + 1] = c;
+
+            level[(LEVEL_V / 2 - 1) * 2][c * 2 + 2] = '.';
+        }
+
+        R[L[c]] = R[c]; // Link L[c] to R[c]
+        L[R[c]] = L[c];
+        R[c] = c; // Link c to c
+        L[c] = c;
+    }
+}
+
 void newlevel(void)
 {
-  int r = random(LEVEL_V - 4) + 2;
-  for(int y = 0; y < LEVEL_V; y++)
-  {
-    for(int x = 0; x < LEVEL_H; x++)
-    {
-      // level[y][x] = ((y != r && random(11) < 4) ? '#' : '.');
-      level[y][x] = ((y != r && random(10) < 4) ? '#' : '.');
-    }
-    view[y][LEVEL_H] = '\0';
-  }
-  simulation_step();
-  simulation_step();
-  x = random(LEVEL_H - 4) + 2;
-  y = random(LEVEL_V - 4) + 2;
-  level[random(LEVEL_V - 4) + 2][random(LEVEL_H - 4) + 2] = '>';
+//  int r = random(LEVEL_V - 4) + 2;
+//  for(int y = 0; y < LEVEL_V; y++)
+//  {
+//    for(int x = 0; x < LEVEL_H; x++)
+//    {
+//      // level[y][x] = ((y != r && random(11) < 4) ? '#' : '.');
+//      level[y][x] = ((y != r && random(10) < 4) ? '#' : '.');
+//    }
+//    view[y][LEVEL_H] = '\0';
+//  }
+//  simulation_step();
+//  simulation_step();
+//  x = random(LEVEL_H - 4) + 2;
+//  y = random(LEVEL_V - 4) + 2;
+//  level[random(LEVEL_V - 4) + 2][random(LEVEL_H - 4) + 2] = '>';
+//  player_clear = level[y][x];
+//  level[y][x] = '@';
+  eller();
+  x = random(LEVEL_H / 2) * 2 + 1;
+  y = random(LEVEL_V / 2) * 2;
+  level[random(LEVEL_V / 2) * 2][random(LEVEL_H / 2) * 2 + 1] = '>';
   player_clear = level[y][x];
   level[y][x] = '@';
   show();
