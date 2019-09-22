@@ -31,65 +31,86 @@ int x, y;
 char level[LEVEL_V][LEVEL_H + 1];
 char view[LEVEL_V][LEVEL_H + 1];
 
-int count_neighbours(int x, int y)
+/* Monsters: start */
+#define MAX_MONSTERS 10
+struct Monsters {
+  int x, y, dx, dy;
+  char monster_clear;
+  // TODO: add direction of turning, left or right
+};
+
+Monsters monsters[MAX_MONSTERS];
+int monster_count = 0;
+
+void generate_monsters()
 {
-  int count = 0;
-  int minx = x, maxx = x, miny = y, maxy = y;
-
-  if(x == 0)
-    count += 3;
-  else
-    minx = x - 1;
-  if(x == LEVEL_H - 1)
-    count += 3;
-  else
-    maxx = x + 1;
-
-  if(y == 0)
-    count += 3;
-  else
-    miny = y - 1;
-  if(y == LEVEL_V - 1)
-    count += 3;
-  else
-    maxy = y + 1;
-
-  if(count == 6)
-    count--;
-
-  for(int py = miny; py <= maxy; py++)
-    for(int px = minx; px < maxx; px++)
-      if(level[py][px] == '#')
-        count++;
-
-  return count;
+  for(int i = 0; i < monster_count; i++)
+  {
+    while(true) // TODO: if too many attempts - stop
+    {
+      monsters[i].x = random(LEVEL_H / 2) * 2 + 1;
+      monsters[i].y = random(LEVEL_V / 2) * 2;
+      if(level[monsters[i].y][monsters[i].x] == '.') // TODO: change to "is_empty"
+        break;
+    }
+    monsters[i].dx = monsters[i].dy = 0;
+    switch(random(4))
+    {
+    case 0:
+      monsters[i].dx = +1;
+      break;
+    case 1:
+      monsters[i].dy = +1;
+      break;
+    case 2:
+      monsters[i].dx = -1;
+      break;
+    case 3:
+      monsters[i].dy = -1;
+      break;
+    }
+    monsters[i].monster_clear = level[monsters[i].y][monsters[i].x];
+    level[monsters[i].y][monsters[i].x] = 's'; // TODO: add more monster types
+  }
 }
 
-
-void simulation_step(void)
+void monster_step(int m)
 {
-  for(int y = 0; y < LEVEL_V; y++)
+  int tmp = monsters[m].dx;
+  monsters[m].dx = -monsters[m].dy;
+  monsters[m].dy = tmp;
+  for(int j = 0; j < 4; j++)
   {
-    for(int x = 0; x < LEVEL_H; x++)
+    if(monsters[m].y + monsters[m].dy >= 0 && level[monsters[m].y + monsters[m].dy][monsters[m].x + monsters[m].dx] == '.') // TODO: change to "is_empty"
     {
-      int nbs = count_neighbours(x, y);
-      if(level[y][x] == '#')
-      {
-        view[y][x] = ((nbs < 3) ? '.' : '#');
-      }
-      else
-      {
-        view[y][x] = ((nbs > 4) ? '#' : '.');
-      }
+      if(view[monsters[m].y][monsters[m].x] != ' ')
+        view[monsters[m].y][monsters[m].x] = monsters[m].monster_clear;
+      level[monsters[m].y][monsters[m].x] = monsters[m].monster_clear;
+      monsters[m].y += monsters[m].dy;
+      monsters[m].x += monsters[m].dx;
+      if(view[monsters[m].y][monsters[m].x] != ' ')
+        view[monsters[m].y][monsters[m].x] = 's';
+      monsters[m].monster_clear = level[monsters[m].y][monsters[m].x];
+      level[monsters[m].y][monsters[m].x] = 's';
+      break;
+    }
+    else
+    {
+      tmp = -monsters[m].dx;
+      monsters[m].dx = monsters[m].dy;
+      monsters[m].dy = tmp;
     }
   }
+}
 
-  for(int y = 0; y < LEVEL_V; y++)
+void monsters_step()
+{
+  for(int i = 0; i < monster_count; i++)
   {
-    memcpy(level[y], view[y], LEVEL_H + 1);
-    memset(view[y], ' ', LEVEL_H);
+    monster_step(i);
   }
 }
+/* Monsters:finish */
 
 U8GLIB_SH1106_128X64 u8g(U8G_I2C_OPT_DEV_0 | U8G_I2C_OPT_FAST); // I2C / TWI 1.3
 
@@ -166,34 +187,18 @@ void eller()
 
         R[L[c]] = R[c]; // Link L[c] to R[c]
         L[R[c]] = L[c];
-        R[c] = c; // Link c to c
-        L[c] = c;
+        R[c] = L[c] = c; // Link c to c
     }
 }
 
 void newlevel(void)
 {
-//  int r = random(LEVEL_V - 4) + 2;
-//  for(int y = 0; y < LEVEL_V; y++)
-//  {
-//    for(int x = 0; x < LEVEL_H; x++)
-//    {
-//      // level[y][x] = ((y != r && random(11) < 4) ? '#' : '.');
-//      level[y][x] = ((y != r && random(10) < 4) ? '#' : '.');
-//    }
-//    view[y][LEVEL_H] = '\0';
-//  }
-//  simulation_step();
-//  simulation_step();
-//  x = random(LEVEL_H - 4) + 2;
-//  y = random(LEVEL_V - 4) + 2;
-//  level[random(LEVEL_V - 4) + 2][random(LEVEL_H - 4) + 2] = '>';
-//  player_clear = level[y][x];
-//  level[y][x] = '@';
   eller();
+  monster_count++;
+  generate_monsters();
   x = random(LEVEL_H / 2) * 2 + 1;
   y = random(LEVEL_V / 2) * 2;
-  level[random(LEVEL_V / 2) * 2][random(LEVEL_H / 2) * 2 + 1] = '>';
+  level[random(LEVEL_V / 2) * 2][random(LEVEL_H / 2) * 2 + 1] = '>'; // TODO: find a dead-end
   player_clear = level[y][x];
   level[y][x] = '@';
   show();
@@ -239,6 +244,7 @@ void move(int dx, int dy)
       break;
     }
   }
+  monsters_step();
 }
 
 void loop(void) {
