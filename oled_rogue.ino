@@ -30,17 +30,22 @@ enum PlayerClass {
 };
 int player_class = PC_Fighter;
 const char *class_names[] = {"Fighter", "Mage", "Thief"};
+const char *stat_names[] = {"Strength", "Intelligence", "Agility"};
 /* Menu: finish */
 
 /* Player: start */
 enum PlayerStates {
   PS_Menu = 0,
   PS_Game,
-  PS_Inventory
+  PS_Inventory, // TODO: Win scene
+  PS_Lose,
+  PS_Win, // TODO: Levelup scene, on descention
 } player_state = PS_Menu;
 
 char player_clear;
-int x, y;
+int x, y, hp, maxhp, xp = 0;
+int Strength, Intelligence, Agility;
+int dungeon_level = 0; // TODO: increase (?)
 /* Player: finish */
 
 #define LEVEL_V 8
@@ -51,13 +56,22 @@ char view[LEVEL_V][LEVEL_H + 1];
 
 /* Monsters: start */
 #define MAX_MONSTERS 10
-struct Monsters {
-  int x, y, dx, dy;
-  char monster_clear;
-  // TODO: add direction of turning, left or right
+
+enum MonsterClass {
+  MC_Beast = 0,
+  MC_Undead,
+  MC_Flying
 };
 
-Monsters monsters[MAX_MONSTERS];
+struct Monsters {
+  int x, y, dx, dy;
+  char monster_clear, monster_appearance;
+  MonsterClass monster_class;
+  int stat_value;
+  bool alive;
+  
+  // TODO: add direction of turning, left or right
+} monsters[MAX_MONSTERS];
 int monster_count = 0;
 
 void generate_monsters()
@@ -71,6 +85,7 @@ void generate_monsters()
       if(level[monsters[i].y][monsters[i].x] == '.') // TODO: change to "is_empty"
         break;
     }
+    monsters[i].alive = true;
     monsters[i].dx = monsters[i].dy = 0;
     switch(random(4))
     {
@@ -88,18 +103,78 @@ void generate_monsters()
       break;
     }
     monsters[i].monster_clear = level[monsters[i].y][monsters[i].x];
-    level[monsters[i].y][monsters[i].x] = 'S'; // TODO: add more monster types
+    switch(random(3))
+    {
+    case 0:
+      monsters[i].monster_appearance = 'S';
+      monsters[i].monster_class = MC_Beast;
+      break;
+    case 1:
+      monsters[i].monster_appearance = 'Z';
+      monsters[i].monster_class = MC_Undead;
+      break;
+    case 2:
+      monsters[i].monster_appearance = 'F';
+      monsters[i].monster_class = MC_Flying;
+      break;
+    }
+    monsters[i].stat_value = random(dungeon_level) + 1;
+    level[monsters[i].y][monsters[i].x] = monsters[i].monster_appearance;
   }
 }
 
-void monster_step(int m)
+void monster_fight(int m)
 {
-  int tmp = monsters[m].dx;
+  int h = sq(x - monsters[m].x) + sq(y - monsters[m].y);
+  if(h > 2)
+    return;
+  bool Win = false;
+  if(monsters[m].monster_class == MC_Undead && player_class == PC_Mage)
+  {
+    Win = true;
+  }
+  else
+  {
+    switch(monsters[m].monster_class)
+    {
+    case MC_Beast:
+      if(Strength > monsters[m].stat_value)
+        Win = true;
+      break;
+    case MC_Undead:
+      if(Intelligence > monsters[m].stat_value)
+        Win = true;
+      break;
+    case MC_Flying:
+      if(Agility > monsters[m].stat_value)
+        Win = true;
+      break;
+    }
+  }
+  xp += monsters[m].stat_value;
+  if(!Win)
+  {
+    hp -= monsters[m].stat_value;
+    if(hp <= 0)
+      player_state = PS_Lose;
+  }
+  level[monsters[m].y][monsters[m].x] = monsters[m].monster_clear;
+  monsters[m].alive = false;
+  show();
+}
+
+void monster_step(int m) // TODO: use pointer to current monster
+{
+  if(monsters[m].alive)
+    monster_fight(m);
+  if(!monsters[m].alive)
+    return;
+  int tmp = monsters[m].dx; // Turn monster's direction clockwise
   monsters[m].dx = -monsters[m].dy;
   monsters[m].dy = tmp;
-  for(int j = 0; j < 4; j++)
+  for(int j = 0; j < 4; j++) // 4 directions
   {
-    if(monsters[m].y + monsters[m].dy >= 0 && level[monsters[m].y + monsters[m].dy][monsters[m].x + monsters[m].dx] == '.') // TODO: change to "is_empty"
+    if(monsters[m].y + monsters[m].dy >= 0 && monsters[m].y + monsters[m].dy < LEVEL_V - 1 && level[monsters[m].y + monsters[m].dy][monsters[m].x + monsters[m].dx] == '.') // TODO: change to "is_empty"
     {
       if(view[monsters[m].y][monsters[m].x] != ' ')
         view[monsters[m].y][monsters[m].x] = monsters[m].monster_clear;
@@ -107,14 +182,14 @@ void monster_step(int m)
       monsters[m].y += monsters[m].dy;
       monsters[m].x += monsters[m].dx;
       if(view[monsters[m].y][monsters[m].x] != ' ')
-        view[monsters[m].y][monsters[m].x] = 'S';
+        view[monsters[m].y][monsters[m].x] = monsters[m].monster_appearance;
       monsters[m].monster_clear = level[monsters[m].y][monsters[m].x];
-      level[monsters[m].y][monsters[m].x] = 'S';
+      level[monsters[m].y][monsters[m].x] = monsters[m].monster_appearance;
       break;
     }
     else
     {
-      tmp = -monsters[m].dx;
+      tmp = -monsters[m].dx; // Turn monster's direction counterclockwise
       monsters[m].dx = monsters[m].dy;
       monsters[m].dy = tmp;
     }
@@ -212,13 +287,14 @@ void eller()
 void newlevel(void)
 {
   eller();
-  monster_count++;
-  generate_monsters();
+  if(monster_count < MAX_MONSTERS - 1)
+    monster_count++;
   x = random(LEVEL_H / 2) * 2 + 1;
   y = random(LEVEL_V / 2) * 2;
   level[random(LEVEL_V / 2) * 2][random(LEVEL_H / 2) * 2 + 1] = '>'; // TODO: find a dead-end
   player_clear = level[y][x];
   level[y][x] = '@';
+  generate_monsters();
   show();
 }
 
@@ -235,13 +311,14 @@ void setup(void)
 
 void show(void)
 {
-  for(int py = max(y - 1, 0); py < min(y + 2, LEVEL_V); py++)
+  for(int py = max(y - 1, 0); py < min(y + 2, LEVEL_V - 1); py++)
   {
     for(int px = max(x - 1, 0); px < min(x + 2, LEVEL_H); px++)
     {
       view[py][px] = level[py][px];
     }
   }
+  sprintf(view[LEVEL_V - 1], "%d (%d, %d, %d) %d [%d]", hp, Strength, Intelligence, Agility, xp, dungeon_level);
 }
 
 void move(int dx, int dy)
@@ -253,11 +330,12 @@ void move(int dx, int dy)
 //    case '#':
 //      break;
     case '>':
+      dungeon_level++;
       newlevel();
       break;
     case '.':
       level[y][x] = player_clear;
-      x += dx;
+      x += dx; // TODO: count steps, heal up
       y += dy;
       player_clear = level[y][x];
       level[y][x] = '@';
@@ -304,6 +382,18 @@ void loop(void) {
     if(trigger_a) {
       player_state = PS_Game;
       newlevel();
+      switch(player_class)
+      {
+      case PC_Fighter:
+        Strength = 2, Intelligence = 2, Agility = 2, hp = 50;
+        break;
+      case PC_Mage:
+        Strength = 1, Intelligence = 4, Agility = 1, hp = 10;
+        break;
+      case PC_Thief:
+        Strength = 2, Intelligence = 2, Agility = 4, hp = 20;
+        break;
+      }
       break;
     }
     view[0][0] = (player_class == PC_Fighter ? '>' : ' ');
@@ -312,7 +402,7 @@ void loop(void) {
     break;
   case PS_Game:
     if(trigger_a) {
-      for(int y = 0; y < LEVEL_V; y++)
+      for(int y = 0; y < LEVEL_V - 1; y++)
         memcpy(view[y], level[y], LEVEL_H);
     }
     if(trigger_left) {
@@ -328,7 +418,13 @@ void loop(void) {
       move(0, +1);
     }
     break;
-  case PS_Inventory:
+  case PS_Lose:
+    sprintf(view[0], "You lost your life");
+    sprintf(view[1], " on %d-th level of", dungeon_level);
+    sprintf(view[2], " gloomy dungeon");
+    sprintf(view[3], " scoring %d", xp);
+    sprintf(view[4], " expirience points.");
+    view[5][0] = view[6][0] = view[7][0] = '\0';
     break;
   }
 
