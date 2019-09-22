@@ -22,8 +22,26 @@ struct MyButtons {
 MyButtons buttons_previous;
 MyButtons buttons_states = {false, false, false, false, false, false, false, false};
 
-char player_clear = '.';
+/* Menu: start */
+enum PlayerClass {
+  PC_Fighter = 0,
+  PC_Mage = 1,
+  PC_Thief = 2
+};
+int player_class = PC_Fighter;
+const char *class_names[] = {"Fighter", "Mage", "Thief"};
+/* Menu: finish */
+
+/* Player: start */
+enum PlayerStates {
+  PS_Menu = 0,
+  PS_Game,
+  PS_Inventory
+} player_state = PS_Menu;
+
+char player_clear;
 int x, y;
+/* Player: finish */
 
 #define LEVEL_V 8
 #define LEVEL_H 25
@@ -70,7 +88,7 @@ void generate_monsters()
       break;
     }
     monsters[i].monster_clear = level[monsters[i].y][monsters[i].x];
-    level[monsters[i].y][monsters[i].x] = 's'; // TODO: add more monster types
+    level[monsters[i].y][monsters[i].x] = 'S'; // TODO: add more monster types
   }
 }
 
@@ -89,9 +107,9 @@ void monster_step(int m)
       monsters[m].y += monsters[m].dy;
       monsters[m].x += monsters[m].dx;
       if(view[monsters[m].y][monsters[m].x] != ' ')
-        view[monsters[m].y][monsters[m].x] = 's';
+        view[monsters[m].y][monsters[m].x] = 'S';
       monsters[m].monster_clear = level[monsters[m].y][monsters[m].x];
-      level[monsters[m].y][monsters[m].x] = 's';
+      level[monsters[m].y][monsters[m].x] = 'S';
       break;
     }
     else
@@ -209,7 +227,10 @@ void setup(void)
   randomSeed(analogRead(0));
   DDRD &= ~0b11111100; PORTD |= 0b11111100; // set digital pin 2-7 as INPUT_PULLUP
   DDRB &= ~0b00000011; PORTB |= 0b00000011; // set digital pin 8-9 as INPUT_PULLUP
-  newlevel();
+  // newlevel();
+  strcpy(view[0] + 1, class_names[PC_Fighter]);
+  strcpy(view[1] + 1, class_names[PC_Mage]);
+  strcpy(view[2] + 1, class_names[PC_Thief]);
 }
 
 void show(void)
@@ -260,30 +281,55 @@ void loop(void) {
   buttons_states.d8 = ((PINB & 0b00000001) == 0);
   buttons_states.d9 = ((PINB & 0b00000010) == 0);
 
-  if(buttons_states.d2 && !buttons_previous.d2) {
-    for(int y = 0; y < LEVEL_V; y++)
-      memcpy(view[y], level[y], LEVEL_H);
-  }
-  if(buttons_states.d3 && !buttons_previous.d3) {
-     // b
-  }
-  if(buttons_states.d4 && !buttons_previous.d4) {
-     // x
-  }
-  if(buttons_states.d5 && !buttons_previous.d5) {
-     // y
-  }
-  if(buttons_states.d6 && !buttons_previous.d6) {
-    move(-1, 0);
-  }
-  if(buttons_states.d7 && !buttons_previous.d7) {
-    move(0, -1);
-  }
-  if(buttons_states.d8 && !buttons_previous.d8) {
-    move(+1, 0);
-  }
-  if(buttons_states.d9 && !buttons_previous.d9) {
-    move(0, +1);
+  bool trigger_a = (buttons_states.d2 && !buttons_previous.d2);
+  bool trigger_b = (buttons_states.d3 && !buttons_previous.d3);
+  bool trigger_x = (buttons_states.d4 && !buttons_previous.d4);
+  bool trigger_y = (buttons_states.d5 && !buttons_previous.d5);
+  bool trigger_left = (buttons_states.d6 && !buttons_previous.d6);
+  bool trigger_up = (buttons_states.d7 && !buttons_previous.d7);
+  bool trigger_right = (buttons_states.d8 && !buttons_previous.d8);
+  bool trigger_down = (buttons_states.d9 && !buttons_previous.d9);
+
+  switch(player_state)
+  {
+  case PS_Menu:
+    if(trigger_up) {
+      if(player_class != PC_Fighter)
+        player_class--;
+    }
+    if(trigger_down) {
+      if(player_class != PC_Thief)
+        player_class++;
+    }
+    if(trigger_a) {
+      player_state = PS_Game;
+      newlevel();
+      break;
+    }
+    view[0][0] = (player_class == PC_Fighter ? '>' : ' ');
+    view[1][0] = (player_class == PC_Mage ? '>' : ' ');
+    view[2][0] = (player_class == PC_Thief ? '>' : ' ');
+    break;
+  case PS_Game:
+    if(trigger_a) {
+      for(int y = 0; y < LEVEL_V; y++)
+        memcpy(view[y], level[y], LEVEL_H);
+    }
+    if(trigger_left) {
+      move(-1, 0);
+    }
+    if(trigger_up) {
+      move(0, -1);
+    }
+    if(trigger_right) {
+      move(+1, 0);
+    }
+    if(trigger_down) {
+      move(0, +1);
+    }
+    break;
+  case PS_Inventory:
+    break;
   }
 
   buttons_previous = buttons_states;
