@@ -1,4 +1,5 @@
 #include "U8glib.h"
+// TODO: split into files
 
 #define D2 2
 #define D3 3
@@ -213,14 +214,13 @@ void draw(int n)
   u8g.drawStr(0, n * 8 + 8, view[n]);
 }
 
+// https://bitbucket.org/eworoshow/maze/src/
 void eller()
 {
-    // For a set of cells i_1, i_2, ..., i_k from left to right that are connected in the previous row R[i_1] = i_2, R[i_2] = i_3, ... and R[i_k] = i_1. Similarly for the left
-    int L[LEVEL_H / 2], R[LEVEL_H / 2];
+    int L[LEVEL_H / 2], R[LEVEL_H / 2]; // Set of cells: i links to R[i] (right). Similarly for the left
 
-    // At the top each cell is connected only to itself
     for(int c = 0; c < LEVEL_H / 2; c++)
-        L[c] = R[c] = c;
+        L[c] = R[c] = c; // At the top each cell is connected only to itself
 
     for(int r = 0; r < LEVEL_V; r++)
     {
@@ -231,18 +231,16 @@ void eller()
             else
                 level[r][c] = '.';
         }
-        level[r][LEVEL_H] = '\0';
+        level[r][LEVEL_H] = '\0'; // TODO: Do I need it?
         memset(view[r], ' ', LEVEL_H);
         view[r][LEVEL_H] = '\0';
     }
 
-    // Generate each row of the maze excluding the last
-    for(int r = 0; r < LEVEL_V / 2 - 1; r++)
+    for(int r = 0; r < LEVEL_V / 2 - 1; r++) // Generate each row of the maze excluding the last
     {
         for(int c = 0; c < LEVEL_H / 2; c++)
         {
-            // Should we connect this cell and its neighbour to the right?
-            if(c != LEVEL_H / 2 - 1 && c + 1 != R[c] && random(2) == 0)
+            if(c != LEVEL_H / 2 - 1 && c + 1 != R[c] && random(2) == 0) // Should we connect this cell and its neighbour to the right?
             {
                 R[L[c + 1]] = R[c]; // Link L[c + 1] to R[c]
                 L[R[c]] = L[c + 1];
@@ -252,8 +250,7 @@ void eller()
                 level[r * 2][c * 2 + 2] = '.';
             }
 
-            // Should we connect this cell and its neighbour below?
-            if(c != R[c] && random(2) == 0)
+            if(c != R[c] && random(2) == 0) // Should we connect this cell and its neighbour below?
             {
                 R[L[c]] = R[c]; // Link L[c] to R[c]
                 L[R[c]] = L[c];
@@ -265,8 +262,7 @@ void eller()
         }
     }
 
-    // Handle the last row to guarantee the maze is connected
-    for(int c = 0; c < LEVEL_H / 2; c++)
+    for(int c = 0; c < LEVEL_H / 2; c++) // Handle the last row to guarantee the maze is connected
     {
         if(c != LEVEL_H / 2 - 1 && c + 1 != R[c] && (c == R[c] || random(2) == 0))
         {
@@ -420,7 +416,7 @@ void loop(void) {
     break;
   case PS_Lose:
     sprintf(view[0], "You lost your life");
-    sprintf(view[1], " on %d-th level of", dungeon_level);
+    sprintf(view[1], " on %d-%s level of", dungeon_level, (dungeon_level == 1 ? "-st" : (dungeon_level == 2 ? "-nd" : (dungeon_level == 3 ? "-rd" : "-th"))));
     sprintf(view[2], " gloomy dungeon");
     sprintf(view[3], " scoring %d", xp);
     sprintf(view[4], " expirience points.");
