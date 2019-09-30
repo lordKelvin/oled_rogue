@@ -211,7 +211,7 @@ U8GLIB_SH1106_128X64 u8g(U8G_I2C_OPT_DEV_0 | U8G_I2C_OPT_FAST); // I2C / TWI 1.3
 void draw(int n)
 {
   u8g.setFont(u8g_font_5x8);
-  u8g.drawStr(0, n * 8 + 8, view[n]);
+  u8g.drawStr(0, n * 8 + 7, view[n]);
 }
 
 // https://bitbucket.org/eworoshow/maze/src/
@@ -305,13 +305,36 @@ void setup(void)
   strcpy(view[2] + 1, class_names[PC_Thief]);
 }
 
+bool is_empty(int x, int y)
+{
+  if(x < 0 || y < 0 || x >= LEVEL_H || y >= LEVEL_V)
+    return false;
+
+  return (level[y][x] == '.' || level[y][x] == '>');
+}
+
+
+
 void show(void)
 {
-  for(int py = max(y - 1, 0); py < min(y + 2, LEVEL_V - 1); py++)
+  for(int py = max(y - 2, 0); py < min(y + 2 + 1, LEVEL_V - 1); py++)
   {
-    for(int px = max(x - 1, 0); px < min(x + 2, LEVEL_H); px++)
+    for(int px = max(x - 2, 0); px < min(x + 2 + 1, LEVEL_H); px++)
     {
-      view[py][px] = level[py][px];
+      if(px == x - 2 || px == x + 2 || py == y - 2 || py == y + 2)
+      {
+        int tmpx = px, tmpy = py;
+        if(px < x) tmpx++;
+        if(px > x) tmpx--;
+        if(py < y) tmpy++;
+        if(py > y) tmpy--;
+        if(is_empty(tmpx, tmpy))
+          view[py][px] = level[py][px];
+      }
+      else
+      {
+        view[py][px] = level[py][px];
+      }
     }
   }
   sprintf(view[LEVEL_V - 1], "%d (%d, %d, %d) %d [%d]", hp, Strength, Intelligence, Agility, xp, dungeon_level);
@@ -323,13 +346,7 @@ void move(int dx, int dy)
   {
     switch(level[y + dy][x + dx])
     {
-//    case '#':
-//      break;
-    case '>':
-      dungeon_level++;
-      newlevel();
-      break;
-    case '.':
+    case '.': case '>':
       level[y][x] = player_clear;
       x += dx; // TODO: count steps, heal up
       y += dy;
@@ -398,6 +415,13 @@ void loop(void) {
     break;
   case PS_Game:
     if(trigger_a) {
+      if(player_clear == '>')
+      {
+        dungeon_level++;
+        newlevel();
+      }
+    }
+    if(trigger_b) {
       for(int y = 0; y < LEVEL_V - 1; y++)
         memcpy(view[y], level[y], LEVEL_H);
     }
@@ -416,7 +440,7 @@ void loop(void) {
     break;
   case PS_Lose:
     sprintf(view[0], "You lost your life");
-    sprintf(view[1], " on %d-%s level of", dungeon_level, (dungeon_level == 1 ? "-st" : (dungeon_level == 2 ? "-nd" : (dungeon_level == 3 ? "-rd" : "-th"))));
+    sprintf(view[1], " on %d-%s level of", dungeon_level, (dungeon_level == 1 ? "st" : (dungeon_level == 2 ? "nd" : (dungeon_level == 3 ? "rd" : "th"))));
     sprintf(view[2], " gloomy dungeon");
     sprintf(view[3], " scoring %d", xp);
     sprintf(view[4], " expirience points.");
