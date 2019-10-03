@@ -46,7 +46,7 @@ enum PlayerStates {
 char player_clear;
 int x, y, hp, maxhp, xp = 0;
 int Strength, Intelligence, Agility;
-int dungeon_level = 0; // TODO: increase (?)
+int dungeon_level = 0;
 /* Player: finish */
 
 #define LEVEL_V 8
@@ -83,7 +83,7 @@ void generate_monsters()
     {
       monsters[i].x = random(LEVEL_H / 2) * 2 + 1;
       monsters[i].y = random(LEVEL_V / 2) * 2;
-      if(level[monsters[i].y][monsters[i].x] == '.') // TODO: change to "is_empty"
+      if(is_empty(monsters[i].x, monsters[i].y))
         break;
     }
     monsters[i].alive = true;
@@ -175,9 +175,9 @@ void monster_step(int m) // TODO: use pointer to current monster
   monsters[m].dy = tmp;
   for(int j = 0; j < 4; j++) // 4 directions
   {
-    if(monsters[m].y + monsters[m].dy >= 0 && monsters[m].y + monsters[m].dy < LEVEL_V - 1 && level[monsters[m].y + monsters[m].dy][monsters[m].x + monsters[m].dx] == '.') // TODO: change to "is_empty"
+    if(monsters[m].y + monsters[m].dy < LEVEL_V - 1 && is_empty(monsters[m].x + monsters[m].dx, monsters[m].y + monsters[m].dy))
     {
-      if(view[monsters[m].y][monsters[m].x] != ' ')
+      if(view[monsters[m].y][monsters[m].x] != ' ') // TODO: Fight here
         view[monsters[m].y][monsters[m].x] = monsters[m].monster_clear;
       level[monsters[m].y][monsters[m].x] = monsters[m].monster_clear;
       monsters[m].y += monsters[m].dy;
@@ -299,7 +299,6 @@ void setup(void)
   randomSeed(analogRead(0));
   DDRD &= ~0b11111100; PORTD |= 0b11111100; // set digital pin 2-7 as INPUT_PULLUP
   DDRB &= ~0b00000011; PORTB |= 0b00000011; // set digital pin 8-9 as INPUT_PULLUP
-  // newlevel();
   strcpy(view[0] + 1, class_names[PC_Fighter]);
   strcpy(view[1] + 1, class_names[PC_Mage]);
   strcpy(view[2] + 1, class_names[PC_Thief]);
@@ -312,8 +311,6 @@ bool is_empty(int x, int y)
 
   return (level[y][x] == '.' || level[y][x] == '>');
 }
-
-
 
 void show(void)
 {
@@ -394,7 +391,6 @@ void loop(void) {
     }
     if(trigger_a) {
       player_state = PS_Game;
-      newlevel();
       switch(player_class)
       {
       case PC_Fighter:
@@ -407,6 +403,7 @@ void loop(void) {
         Strength = 2, Intelligence = 2, Agility = 4, hp = 20;
         break;
       }
+      newlevel();
       break;
     }
     view[0][0] = (player_class == PC_Fighter ? '>' : ' ');
