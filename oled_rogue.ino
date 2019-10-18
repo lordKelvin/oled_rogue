@@ -1,14 +1,6 @@
 #include "U8glib.h"
+#include "config.h"
 // TODO: split into files
-
-#define D2 2
-#define D3 3
-#define D4 4
-#define D5 5
-#define D6 6
-#define D7 7
-#define D8 8
-#define D9 9
 
 struct MyButtons {
   unsigned int d2 : 1;
@@ -49,14 +41,10 @@ int Strength, Intelligence, Agility;
 int dungeon_level = 0;
 /* Player: finish */
 
-#define LEVEL_V 8
-#define LEVEL_H 25
-
-char level[LEVEL_V][LEVEL_H + 1];
+char level[LEVEL_V][LEVEL_H];
 char view[LEVEL_V][LEVEL_H + 1];
 
 /* Monsters: start */
-#define MAX_MONSTERS 10
 
 enum MonsterClass {
   MC_Beast = 0,
@@ -69,9 +57,7 @@ struct Monsters {
   char monster_clear, monster_appearance;
   MonsterClass monster_class;
   int stat_value;
-  bool alive;
-  
-  // TODO: add direction of turning, left or right
+  bool alive, ccw;
 } monsters[MAX_MONSTERS];
 int monster_count = 0;
 
@@ -87,6 +73,7 @@ void generate_monsters()
         break;
     }
     monsters[i].alive = true;
+    monsters[i].ccw = random(2) == 1;
     monsters[i].dx = monsters[i].dy = 0;
     switch(random(4))
     {
@@ -164,35 +151,47 @@ void monster_fight(int m)
   show();
 }
 
+void xchg(int &a, int &b)
+{
+  int tmp = a;
+  a = b;
+  b = tmp;
+}
+
 void monster_step(int m) // TODO: use pointer to current monster
 {
-  if(monsters[m].alive)
+  Monsters &mon = monsters[m];
+  if(mon.alive)
     monster_fight(m);
-  if(!monsters[m].alive)
+  else
     return;
-  int tmp = monsters[m].dx; // Turn monster's direction clockwise
-  monsters[m].dx = -monsters[m].dy;
-  monsters[m].dy = tmp;
+  xchg(mon.dx, mon.dy);
+  if(mon.ccw)
+    mon.dx = -mon.dx;
+  else
+    mon.dy = -mon.dy;
   for(int j = 0; j < 4; j++) // 4 directions
   {
-    if(monsters[m].y + monsters[m].dy < LEVEL_V - 1 && is_empty(monsters[m].x + monsters[m].dx, monsters[m].y + monsters[m].dy))
+    if(mon.y + mon.dy < LEVEL_V - 1 && is_empty(mon.x + mon.dx, mon.y + mon.dy))
     {
-      if(view[monsters[m].y][monsters[m].x] != ' ') // TODO: Fight here
-        view[monsters[m].y][monsters[m].x] = monsters[m].monster_clear;
-      level[monsters[m].y][monsters[m].x] = monsters[m].monster_clear;
-      monsters[m].y += monsters[m].dy;
-      monsters[m].x += monsters[m].dx;
-      if(view[monsters[m].y][monsters[m].x] != ' ')
-        view[monsters[m].y][monsters[m].x] = monsters[m].monster_appearance;
-      monsters[m].monster_clear = level[monsters[m].y][monsters[m].x];
-      level[monsters[m].y][monsters[m].x] = monsters[m].monster_appearance;
+      if(view[mon.y][mon.x] != ' ') // TODO: Fight here
+        view[mon.y][mon.x] = mon.monster_clear;
+      level[mon.y][mon.x] = mon.monster_clear;
+      mon.y += mon.dy;
+      mon.x += mon.dx;
+      if(view[mon.y][mon.x] != ' ')
+        view[mon.y][mon.x] = mon.monster_appearance;
+      mon.monster_clear = level[mon.y][mon.x];
+      level[mon.y][mon.x] = mon.monster_appearance;
       break;
     }
     else
     {
-      tmp = -monsters[m].dx; // Turn monster's direction counterclockwise
-      monsters[m].dx = monsters[m].dy;
-      monsters[m].dy = tmp;
+      xchg(mon.dx, mon.dy);
+      if(mon.ccw)
+        mon.dy = -mon.dy;
+      else
+        mon.dx = -mon.dx;
     }
   }
 }
@@ -210,74 +209,73 @@ U8GLIB_SH1106_128X64 u8g(U8G_I2C_OPT_DEV_0 | U8G_I2C_OPT_FAST); // I2C / TWI 1.3
 
 void draw(int n)
 {
-  u8g.setFont(u8g_font_5x8);
+  u8g.setFont(u8g_font_5x8r);
   u8g.drawStr(0, n * 8 + 7, view[n]);
 }
 
 // https://bitbucket.org/eworoshow/maze/src/
 void eller()
 {
-    int L[LEVEL_H / 2], R[LEVEL_H / 2]; // Set of cells: i links to R[i] (right). Similarly for the left
+  int L[LEVEL_H / 2], R[LEVEL_H / 2]; // Set of cells: i links to R[i] (right). Similarly for the left
 
+  for(int c = 0; c < LEVEL_H / 2; c++)
+    L[c] = R[c] = c; // At the top each cell is connected only to itself
+
+  for(int r = 0; r < LEVEL_V; r++)
+  {
+    for(int c = 0; c < LEVEL_H; c++)
+    {
+      if(r % 2 == 1 || c % 2 == 0)
+        level[r][c] = '#';
+      else
+        level[r][c] = '.';
+    }
+    memset(view[r], ' ', LEVEL_H);
+    view[r][LEVEL_H] = '\0';
+  }
+
+  for(int r = 0; r < LEVEL_V / 2 - 1; r++) // Generate each row of the maze excluding the last
+  {
     for(int c = 0; c < LEVEL_H / 2; c++)
-        L[c] = R[c] = c; // At the top each cell is connected only to itself
-
-    for(int r = 0; r < LEVEL_V; r++)
     {
-        for(int c = 0; c < LEVEL_H; c++)
-        {
-            if(r % 2 == 1 || c % 2 == 0)
-                level[r][c] = '#';
-            else
-                level[r][c] = '.';
-        }
-        level[r][LEVEL_H] = '\0'; // TODO: Do I need it?
-        memset(view[r], ' ', LEVEL_H);
-        view[r][LEVEL_H] = '\0';
-    }
+      if(c != LEVEL_H / 2 - 1 && c + 1 != R[c] && random(2) == 0) // Should we connect this cell and its neighbour to the right?
+      {
+        R[L[c + 1]] = R[c]; // Link L[c + 1] to R[c]
+        L[R[c]] = L[c + 1];
+        R[c] = c + 1; // Link c to c + 1
+        L[c + 1] = c;
 
-    for(int r = 0; r < LEVEL_V / 2 - 1; r++) // Generate each row of the maze excluding the last
-    {
-        for(int c = 0; c < LEVEL_H / 2; c++)
-        {
-            if(c != LEVEL_H / 2 - 1 && c + 1 != R[c] && random(2) == 0) // Should we connect this cell and its neighbour to the right?
-            {
-                R[L[c + 1]] = R[c]; // Link L[c + 1] to R[c]
-                L[R[c]] = L[c + 1];
-                R[c] = c + 1; // Link c to c + 1
-                L[c + 1] = c;
+        level[r * 2][c * 2 + 2] = '.';
+      }
 
-                level[r * 2][c * 2 + 2] = '.';
-            }
-
-            if(c != R[c] && random(2) == 0) // Should we connect this cell and its neighbour below?
-            {
-                R[L[c]] = R[c]; // Link L[c] to R[c]
-                L[R[c]] = L[c];
-                R[c] = c; // Link c to c
-                L[c] = c;
-            } else {
-                level[r * 2 + 1][c * 2 + 1] = '.';
-            }
-        }
-    }
-
-    for(int c = 0; c < LEVEL_H / 2; c++) // Handle the last row to guarantee the maze is connected
-    {
-        if(c != LEVEL_H / 2 - 1 && c + 1 != R[c] && (c == R[c] || random(2) == 0))
-        {
-            R[L[c + 1]] = R[c]; // Link L[c + 1] to R[c]
-            L[R[c]] = L[c + 1];
-            R[c] = c + 1; // Link c to c + 1
-            L[c + 1] = c;
-
-            level[(LEVEL_V / 2 - 1) * 2][c * 2 + 2] = '.';
-        }
-
+      if(c != R[c] && random(2) == 0) // Should we connect this cell and its neighbour below?
+      {
         R[L[c]] = R[c]; // Link L[c] to R[c]
         L[R[c]] = L[c];
-        R[c] = L[c] = c; // Link c to c
+        R[c] = c; // Link c to c
+        L[c] = c;
+      } else {
+        level[r * 2 + 1][c * 2 + 1] = '.';
+      }
     }
+  }
+
+  for(int c = 0; c < LEVEL_H / 2; c++) // Handle the last row to guarantee the maze is connected
+  {
+    if(c != LEVEL_H / 2 - 1 && c + 1 != R[c] && (c == R[c] || random(2) == 0))
+    {
+      R[L[c + 1]] = R[c]; // Link L[c + 1] to R[c]
+      L[R[c]] = L[c + 1];
+      R[c] = c + 1; // Link c to c + 1
+      L[c + 1] = c;
+
+      level[(LEVEL_V / 2 - 1) * 2][c * 2 + 2] = '.';
+    }
+
+    R[L[c]] = R[c]; // Link L[c] to R[c]
+    L[R[c]] = L[c];
+    R[c] = L[c] = c; // Link c to c
+  }
 }
 
 void newlevel(void)
@@ -316,15 +314,18 @@ void show(void)
 {
   for(int py = max(y - 2, 0); py < min(y + 2 + 1, LEVEL_V - 1); py++)
   {
+    int tmpy = py;
+    if(py < y) tmpy++;
+    if(py > y) tmpy--;
     for(int px = max(x - 2, 0); px < min(x + 2 + 1, LEVEL_H); px++)
     {
+      if(view[py][px] != ' ')
+        continue;
       if(px == x - 2 || px == x + 2 || py == y - 2 || py == y + 2)
       {
-        int tmpx = px, tmpy = py;
+        int tmpx = px;
         if(px < x) tmpx++;
         if(px > x) tmpx--;
-        if(py < y) tmpy++;
-        if(py > y) tmpy--;
         if(is_empty(tmpx, tmpy))
           view[py][px] = level[py][px];
       }
@@ -339,7 +340,7 @@ void show(void)
 
 void move(int dx, int dy)
 {
-  if(x + dx >= 0 && x + dx < LEVEL_H && y + dy >= 0 && y + dy < LEVEL_V)
+  if(is_empty(x + dx, y + dy))
   {
     switch(level[y + dy][x + dx])
     {
@@ -421,6 +422,10 @@ void loop(void) {
     if(trigger_b) {
       for(int y = 0; y < LEVEL_V - 1; y++)
         memcpy(view[y], level[y], LEVEL_H);
+    }
+    if(trigger_x) {
+      dungeon_level++;
+      newlevel();
     }
     if(trigger_left) {
       move(-1, 0);
