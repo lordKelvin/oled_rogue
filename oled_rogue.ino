@@ -1,6 +1,6 @@
-#include "U8glib.h"
+#include <U8glibmin.h>
 #include "config.h"
-// TODO: split into files
+#include "monsters.h"
 
 struct MyButtons {
   unsigned int d2 : 1;
@@ -21,9 +21,9 @@ enum PlayerClass {
   PC_Mage = 1,
   PC_Thief = 2
 };
-int player_class = PC_Fighter;
-const char *class_names[] = {"Fighter", "Mage", "Thief"};
-const char *stat_names[] = {"Strength", "Intelligence", "Agility"};
+int current_menu = 0;
+const char *class_names[] = {"Fighter", "Mage", "Thief", NULL};
+const char *stat_names[] = {"Strength", "Intelligence", "Agility", NULL};
 /* Menu: finish */
 
 /* Player: start */
@@ -32,11 +32,13 @@ enum PlayerStates {
   PS_Game,
   PS_Inventory, // TODO: Win scene
   PS_Lose,
-  PS_Win, // TODO: Levelup scene, on descention
+  PS_Win,
+  PS_Levelup,
 } player_state = PS_Menu;
 
+int player_class;
 char player_clear;
-int x, y, hp, maxhp, xp = 0;
+int x, y, hp, maxhp, xp = 0, maxxp = 1, xptier = 1;
 int Strength, Intelligence, Agility;
 int dungeon_level = 0;
 /* Player: finish */
@@ -44,174 +46,7 @@ int dungeon_level = 0;
 char level[LEVEL_V][LEVEL_H];
 char view[LEVEL_V][LEVEL_H + 1];
 
-/* Monsters: start */
-
-enum MonsterClass {
-  MC_Beast = 0,
-  MC_Undead,
-  MC_Flying
-};
-
-struct Monsters {
-  int x, y, dx, dy;
-  char monster_clear, monster_appearance;
-  MonsterClass monster_class;
-  int stat_value;
-  bool alive, ccw;
-} monsters[MAX_MONSTERS];
-int monster_count = 0;
-
-void generate_monsters()
-{
-  for(int i = 0; i < monster_count; i++)
-  {
-    while(true) // TODO: if too many attempts - stop
-    {
-      monsters[i].x = random(LEVEL_H / 2) * 2 + 1;
-      monsters[i].y = random(LEVEL_V / 2) * 2;
-      if(is_empty(monsters[i].x, monsters[i].y))
-        break;
-    }
-    monsters[i].alive = true;
-    monsters[i].ccw = random(2) == 1;
-    monsters[i].dx = monsters[i].dy = 0;
-    switch(random(4))
-    {
-    case 0:
-      monsters[i].dx = +1;
-      break;
-    case 1:
-      monsters[i].dy = +1;
-      break;
-    case 2:
-      monsters[i].dx = -1;
-      break;
-    case 3:
-      monsters[i].dy = -1;
-      break;
-    }
-    monsters[i].monster_clear = level[monsters[i].y][monsters[i].x];
-    switch(random(3))
-    {
-    case 0:
-      monsters[i].monster_appearance = 'S';
-      monsters[i].monster_class = MC_Beast;
-      break;
-    case 1:
-      monsters[i].monster_appearance = 'Z';
-      monsters[i].monster_class = MC_Undead;
-      break;
-    case 2:
-      monsters[i].monster_appearance = 'F';
-      monsters[i].monster_class = MC_Flying;
-      break;
-    }
-    monsters[i].stat_value = random(dungeon_level) + 1;
-    level[monsters[i].y][monsters[i].x] = monsters[i].monster_appearance;
-  }
-}
-
-void monster_fight(int m)
-{
-  int h = sq(x - monsters[m].x) + sq(y - monsters[m].y);
-  if(h > 2)
-    return;
-  bool Win = false;
-  if(monsters[m].monster_class == MC_Undead && player_class == PC_Mage)
-  {
-    Win = true;
-  }
-  else
-  {
-    switch(monsters[m].monster_class)
-    {
-    case MC_Beast:
-      if(Strength > monsters[m].stat_value)
-        Win = true;
-      break;
-    case MC_Undead:
-      if(Intelligence > monsters[m].stat_value)
-        Win = true;
-      break;
-    case MC_Flying:
-      if(Agility > monsters[m].stat_value)
-        Win = true;
-      break;
-    }
-  }
-  xp += monsters[m].stat_value;
-  if(!Win)
-  {
-    hp -= monsters[m].stat_value;
-    if(hp <= 0)
-      player_state = PS_Lose;
-  }
-  level[monsters[m].y][monsters[m].x] = monsters[m].monster_clear;
-  monsters[m].alive = false;
-  show();
-}
-
-void xchg(int &a, int &b)
-{
-  int tmp = a;
-  a = b;
-  b = tmp;
-}
-
-void monster_step(int m) // TODO: use pointer to current monster
-{
-  Monsters &mon = monsters[m];
-  if(mon.alive)
-    monster_fight(m);
-  else
-    return;
-  xchg(mon.dx, mon.dy);
-  if(mon.ccw)
-    mon.dx = -mon.dx;
-  else
-    mon.dy = -mon.dy;
-  for(int j = 0; j < 4; j++) // 4 directions
-  {
-    if(mon.y + mon.dy < LEVEL_V - 1 && is_empty(mon.x + mon.dx, mon.y + mon.dy))
-    {
-      if(view[mon.y][mon.x] != ' ') // TODO: Fight here
-        view[mon.y][mon.x] = mon.monster_clear;
-      level[mon.y][mon.x] = mon.monster_clear;
-      mon.y += mon.dy;
-      mon.x += mon.dx;
-      if(view[mon.y][mon.x] != ' ')
-        view[mon.y][mon.x] = mon.monster_appearance;
-      mon.monster_clear = level[mon.y][mon.x];
-      level[mon.y][mon.x] = mon.monster_appearance;
-      break;
-    }
-    else
-    {
-      xchg(mon.dx, mon.dy);
-      if(mon.ccw)
-        mon.dy = -mon.dy;
-      else
-        mon.dx = -mon.dx;
-    }
-  }
-}
-
-void monsters_step()
-{
-  for(int i = 0; i < monster_count; i++)
-  {
-    monster_step(i);
-  }
-}
-/* Monsters:finish */
-
-U8GLIB_SH1106_128X64 u8g(U8G_I2C_OPT_DEV_0 | U8G_I2C_OPT_FAST); // I2C / TWI 1.3
-
-void draw(int n)
-{
-  u8g.setFont(u8g_font_5x8r);
-  u8g.drawStr(0, n * 8 + 7, view[n]);
-}
+U8GLIB_SH1106_128X64 u8g(U8G_I2C_OPT_FAST); // I2C / TWI 1.3
 
 // https://bitbucket.org/eworoshow/maze/src/
 void eller()
@@ -297,9 +132,10 @@ void setup(void)
   randomSeed(analogRead(0));
   DDRD &= ~0b11111100; PORTD |= 0b11111100; // set digital pin 2-7 as INPUT_PULLUP
   DDRB &= ~0b00000011; PORTB |= 0b00000011; // set digital pin 8-9 as INPUT_PULLUP
-  strcpy(view[0] + 1, class_names[PC_Fighter]);
-  strcpy(view[1] + 1, class_names[PC_Mage]);
-  strcpy(view[2] + 1, class_names[PC_Thief]);
+//  Serial.begin(9600);
+//  #ifdef __AVR__
+//    Serial.println(__AVR__);
+//  #endif
 }
 
 bool is_empty(int x, int y)
@@ -319,8 +155,6 @@ void show(void)
     if(py > y) tmpy--;
     for(int px = max(x - 2, 0); px < min(x + 2 + 1, LEVEL_H); px++)
     {
-      if(view[py][px] != ' ')
-        continue;
       if(px == x - 2 || px == x + 2 || py == y - 2 || py == y + 2)
       {
         int tmpx = px;
@@ -335,7 +169,7 @@ void show(void)
       }
     }
   }
-  sprintf(view[LEVEL_V - 1], "%d (%d, %d, %d) %d [%d]", hp, Strength, Intelligence, Agility, xp, dungeon_level);
+  sprintf(view[LEVEL_V - 1], "%d (%d, %d, %d) %d/%d [%d]", hp, Strength, Intelligence, Agility, xp, maxxp, dungeon_level);
 }
 
 void move(int dx, int dy)
@@ -355,6 +189,31 @@ void move(int dx, int dy)
     }
   }
   monsters_step();
+}
+
+int question(char **options, bool sub_item, bool add_item, bool confirm)
+{
+  static int current_item = 0;
+  static int count = -1;
+  if(count == -1)
+  {
+    current_item = 0;
+    for(count = 0; options[count]; count++)
+      strcpy(view[count] + 1, options[count]);
+  }
+  if(sub_item && current_item > 0)
+    current_item--;
+  if(add_item && current_item < count - 1)
+    current_item++;
+  for(int i = 0; i < count; i++)
+    view[i][0] = (current_item == i ? '>' : ' ');
+  if(confirm)
+  {
+    count = -1;
+    return current_item;
+  }
+  else
+    return -1;
 }
 
 void loop(void) {
@@ -379,19 +238,14 @@ void loop(void) {
   bool trigger_right = (buttons_states.d8 && !buttons_previous.d8);
   bool trigger_down = (buttons_states.d9 && !buttons_previous.d9);
 
+  buttons_previous = buttons_states;
+
   switch(player_state)
   {
   case PS_Menu:
-    if(trigger_up) {
-      if(player_class != PC_Fighter)
-        player_class--;
-    }
-    if(trigger_down) {
-      if(player_class != PC_Thief)
-        player_class++;
-    }
-    if(trigger_a) {
-      player_state = PS_Game;
+    player_class = question(class_names, trigger_up, trigger_down, trigger_a);
+    if(player_class != -1)
+    {
       switch(player_class)
       {
       case PC_Fighter:
@@ -404,24 +258,31 @@ void loop(void) {
         Strength = 2, Intelligence = 2, Agility = 4, hp = 20;
         break;
       }
+      player_state = PS_Game;
       newlevel();
-      break;
     }
-    view[0][0] = (player_class == PC_Fighter ? '>' : ' ');
-    view[1][0] = (player_class == PC_Mage ? '>' : ' ');
-    view[2][0] = (player_class == PC_Thief ? '>' : ' ');
     break;
   case PS_Game:
     if(trigger_a) {
       if(player_clear == '>')
       {
         dungeon_level++;
-        newlevel();
+        if(xp >= maxxp)
+        {
+          xptier++;
+          maxxp += xptier;
+          player_state = PS_Levelup;
+        }
+        else
+          newlevel();
       }
     }
     if(trigger_b) {
       for(int y = 0; y < LEVEL_V - 1; y++)
+      {
         memcpy(view[y], level[y], LEVEL_H);
+        view[y][LEVEL_H] = '\0';
+      }
     }
     if(trigger_x) {
       dungeon_level++;
@@ -448,14 +309,43 @@ void loop(void) {
     sprintf(view[4], " expirience points.");
     view[5][0] = view[6][0] = view[7][0] = '\0';
     break;
+  case PS_Levelup:
+    current_menu = question(stat_names, trigger_up, trigger_down, trigger_a);
+    if(current_menu != -1)
+    {
+      switch(current_menu)
+      {
+      case 0:
+        Strength += 1;
+        break;
+      case 1:
+        Intelligence += 1;
+        break;
+      case 2:
+        Agility += 1;
+        break;
+      }
+      if(xp >= maxxp)
+      {
+        xptier++;
+        maxxp += xptier;
+        sprintf(view[LEVEL_V - 1], "%d (%d, %d, %d) %d/%d [%d]", hp, Strength, Intelligence, Agility, xp, maxxp, dungeon_level); // TODO: create function
+      }
+      else
+      {
+        player_state = PS_Game;
+        newlevel();
+      }
+    }
+    break;
   }
-
-  buttons_previous = buttons_states;
 
   int n = 0;
   u8g.firstPage();
+  u8g.setFont(u8g_font_5x8r);
+
   do {
-    draw(n);
+    u8g.drawStr(0, n * 8 + 7, view[n]);
     n++;
   } while(u8g.nextPage()); 
 }
