@@ -120,7 +120,7 @@ void newlevel(void)
     monster_count++;
   x = random(LEVEL_H / 2) * 2 + 1;
   y = random(LEVEL_V / 2) * 2;
-  level[random(LEVEL_V / 2) * 2][random(LEVEL_H / 2) * 2 + 1] = '>'; // TODO: find a dead-end
+  level[random(LEVEL_V / 2) * 2][random(LEVEL_H / 2) * 2 + 1] = '>';
   player_clear = level[y][x];
   level[y][x] = '@';
   generate_monsters();
