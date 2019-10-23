@@ -14,6 +14,8 @@ struct MyButtons {
 };
 MyButtons buttons_previous;
 MyButtons buttons_states = {false, false, false, false, false, false, false, false};
+unsigned long timeout;
+bool power_save = false;
 
 /* Menu: start */
 enum PlayerClass {
@@ -64,8 +66,8 @@ void eller()
         level[r][c] = '#';
       else
         level[r][c] = '.';
+      view[r][c] = ' ';
     }
-    memset(view[r], ' ', LEVEL_H);
     view[r][LEVEL_H] = '\0';
   }
 
@@ -132,6 +134,8 @@ void setup(void)
   randomSeed(analogRead(0));
   DDRD &= ~0b11111100; PORTD |= 0b11111100; // set digital pin 2-7 as INPUT_PULLUP
   DDRB &= ~0b00000011; PORTB |= 0b00000011; // set digital pin 8-9 as INPUT_PULLUP
+  u8g.setFont(u8g_font_5x8r);
+  timeout = millis();
 //  Serial.begin(9600);
 //  #ifdef __AVR__
 //    Serial.println(__AVR__);
@@ -176,25 +180,19 @@ void move(int dx, int dy)
 {
   if(is_empty(x + dx, y + dy))
   {
-    switch(level[y + dy][x + dx])
-    {
-    case '.': case '>':
-      level[y][x] = player_clear;
-      x += dx; // TODO: count steps, heal up
-      y += dy;
-      player_clear = level[y][x];
-      level[y][x] = '@';
-      show();
-      break;
-    }
+    level[y][x] = player_clear;
+    x += dx;
+    y += dy;
+    player_clear = level[y][x];
+    level[y][x] = '@';
+    show();
   }
   monsters_step();
 }
 
-int question(char **options, bool sub_item, bool add_item, bool confirm)
+int question(const char **options, bool sub_item, bool add_item, bool confirm)
 {
-  static int current_item = 0;
-  static int count = -1;
+  static int current_item = 0, count = -1;
   if(count == -1)
   {
     current_item = 0;
@@ -216,7 +214,8 @@ int question(char **options, bool sub_item, bool add_item, bool confirm)
     return -1;
 }
 
-void loop(void) {
+void loop(void)
+{
   // https://robotic-controls.com/learn/optimized-multiple-pin-reads
   // https://www.arduino.cc/en/Reference/PortManipulation
   // https://gist.github.com/nadavmatalon/08e4ab2ca1d0958c551a89ce3cb36d90
@@ -239,6 +238,24 @@ void loop(void) {
   bool trigger_down = (buttons_states.d9 && !buttons_previous.d9);
 
   buttons_previous = buttons_states;
+
+  {
+    unsigned long current_time = millis();
+    if(trigger_left || trigger_up || trigger_right || trigger_down || trigger_left || trigger_up || trigger_right || trigger_down)
+    {
+      if(power_save)
+      {
+        power_save = false;
+//        u8g.sleepOff();
+      }
+      timeout = current_time;
+    }
+    else if(current_time - timeout > SCREENSAVER_TIMEOUT_MS)
+    {
+      power_save = true;
+//      u8g.sleepOn();
+    }
+  }
 
   switch(player_state)
   {
@@ -279,14 +296,14 @@ void loop(void) {
     }
     if(trigger_b) {
       for(int y = 0; y < LEVEL_V - 1; y++)
-      {
         memcpy(view[y], level[y], LEVEL_H);
-        view[y][LEVEL_H] = '\0';
-      }
     }
     if(trigger_x) {
       dungeon_level++;
       newlevel();
+    }
+    if(trigger_y) {
+      u8g.sleepOn();
     }
     if(trigger_left) {
       move(-1, 0);
@@ -342,7 +359,6 @@ void loop(void) {
 
   int n = 0;
   u8g.firstPage();
-  u8g.setFont(u8g_font_5x8r);
 
   do {
     u8g.drawStr(0, n * 8 + 7, view[n]);
