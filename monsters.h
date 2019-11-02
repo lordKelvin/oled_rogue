@@ -23,4 +23,3 @@ extern char view[LEVEL_V][LEVEL_H + 1];
 extern int x, y, hp, maxhp, xp;
 extern int Strength, Intelligence, Agility;
 extern int dungeon_level;
-extern int shake;

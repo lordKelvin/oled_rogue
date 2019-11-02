@@ -91,7 +91,6 @@ void monster_fight(int m)
   level[monsters[m].y][monsters[m].x] = monsters[m].monster_clear;
   monsters[m].alive = false;
   show();
-  shake = 16;
 }
 
 void xchg(signed char &a, signed char &b)
