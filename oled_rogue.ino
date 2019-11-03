@@ -1,6 +1,11 @@
-#include <U8glibmin.h>
+// #include <U8glibmin.h>
+#include "sh1106_i2c.h"
 #include "config.h"
 #include "monsters.h"
+
+// TODO: input string (name)
+// TODO: save current state
+// TODO: It's SSD1306, not sh1106
 
 struct MyButtons {
   unsigned int d2 : 1;
@@ -16,6 +21,7 @@ MyButtons buttons_previous;
 MyButtons buttons_states = {false, false, false, false, false, false, false, false};
 unsigned long timeout;
 bool power_save = false;
+int shake = 0;
 
 /* Menu: start */
 enum PlayerClass {
@@ -48,7 +54,7 @@ int dungeon_level = 0;
 char level[LEVEL_V][LEVEL_H];
 char view[LEVEL_V][LEVEL_H + 1];
 
-U8GLIB_SH1106_128X64 u8g(U8G_I2C_OPT_FAST); // I2C / TWI 1.3
+// U8GLIB_SH1106_128X64 u8g(U8G_I2C_OPT_FAST); // I2C / TWI 1.3
 
 // https://bitbucket.org/eworoshow/maze/src/
 void eller()
@@ -131,12 +137,29 @@ void newlevel(void)
 
 void setup(void)
 {
+//  Serial.begin(9600);
+//  Serial.print("F_CPU = ");
+//  Serial.println(F_CPU);
+//  Serial.print("TWBR = ");
+//  Serial.println(TWBR);
+//  Serial.print("TWSR = ");
+//  Serial.println(TWSR);
+
   randomSeed(analogRead(0));
   DDRD &= ~0b11111100; PORTD |= 0b11111100; // set digital pin 2-7 as INPUT_PULLUP
   DDRB &= ~0b00000011; PORTB |= 0b00000011; // set digital pin 8-9 as INPUT_PULLUP
-  u8g.setFont(u8g_font_5x8r);
+  // u8g.setFont(u8g_font_5x8r);
+
+  delay(100);
+  i2c_init();
+  delay(100);
+
+//  Serial.print("TWBR = ");
+//  Serial.println(TWBR);
+
+  display_init();
+  clear_screen();
   timeout = millis();
-//  Serial.begin(9600);
 //  #ifdef __AVR__
 //    Serial.println(__AVR__);
 //  #endif
@@ -302,9 +325,9 @@ void loop(void)
       dungeon_level++;
       newlevel();
     }
-    if(trigger_y) {
-      u8g.sleepOn();
-    }
+//    if(trigger_y) {
+//      u8g.sleepOn();
+//    }
     if(trigger_left) {
       move(-1, 0);
     }
@@ -357,11 +380,34 @@ void loop(void)
     break;
   }
 
-  int n = 0;
-  u8g.firstPage();
-
-  do {
-    u8g.drawStr(0, n * 8 + 7, view[n]);
-    n++;
-  } while(u8g.nextPage()); 
+//  int n = 0;
+//  u8g.firstPage();
+//
+//  do {
+//    u8g.drawStr(0, n * 8 + 7, view[n]);
+//    n++;
+//  } while(u8g.nextPage());
+  for(uint8_t y = 0; y < 8; y++)
+  {
+    i2c_start();
+    i2c_send(SH1106_I2C_ADDRESS);
+    i2c_send(SH1106_COMMAND);
+    i2c_send(SH1106_COLUMN_LOW + 0);
+    i2c_send(SH1106_COLUMN_HIGH + 0);
+    i2c_send(0xB0 + y);
+    i2c_stop();
+    i2c_start();
+    i2c_send(SH1106_I2C_ADDRESS);
+    i2c_send(SH1106_DATA);
+    put_string(view[y]);
+    i2c_stop();
+  }
+  if(shake)
+  {
+    if(shake & 1)
+      set_scroll(0);
+    else
+      set_scroll(2);
+    shake--;
+  }
 }
