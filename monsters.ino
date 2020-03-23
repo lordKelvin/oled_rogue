@@ -1,4 +1,5 @@
 #include "monsters.h"
+#include "cell.h"
 
 Monsters monsters[MAX_MONSTERS];
 int monster_count = 0;
@@ -32,7 +33,7 @@ void generate_monsters()
       monsters[i].dy = -1;
       break;
     }
-    monsters[i].monster_clear = level[monsters[i].y][monsters[i].x];
+    monsters[i].monster_clear = level_data[monsters[i].y][monsters[i].x].type;
     switch(random(3))
     {
     case 0:
@@ -49,7 +50,8 @@ void generate_monsters()
       break;
     }
     monsters[i].stat_value = random(dungeon_level) + 1;
-    level[monsters[i].y][monsters[i].x] = monsters[i].monster_appearance;
+    if(level_data[monsters[i].y][monsters[i].x].seen)
+      set_char(monsters[i].x, monsters[i].y, monsters[i].monster_appearance);
   }
 }
 
@@ -88,10 +90,11 @@ void monster_fight(int m)
     if(hp <= 0)
       player_state = PS_Lose;
   }
-  level[monsters[m].y][monsters[m].x] = monsters[m].monster_clear;
+  set_char(monsters[m].x, monsters[m].y, celltype_to_char[monsters[m].monster_clear]);
   monsters[m].alive = false;
-  show();
-  shake = 16;
+  // show();
+  set_char(x, y, '@');
+  shake = 6;
 }
 
 void xchg(signed char &a, signed char &b)
@@ -117,15 +120,13 @@ void monster_step(int m)
   {
     if(mon.y + mon.dy < LEVEL_V - 1 && is_empty(mon.x + mon.dx, mon.y + mon.dy))
     {
-      if(view[mon.y][mon.x] != ' ') // TODO: Fight here
-        view[mon.y][mon.x] = mon.monster_clear;
-      level[mon.y][mon.x] = mon.monster_clear;
+      if(level_data[mon.y][mon.x].seen)
+        set_char(mon.x, mon.y, celltype_to_char[mon.monster_clear]);
       mon.y += mon.dy;
       mon.x += mon.dx;
-      if(view[mon.y][mon.x] != ' ')
-        view[mon.y][mon.x] = mon.monster_appearance;
-      mon.monster_clear = level[mon.y][mon.x];
-      level[mon.y][mon.x] = mon.monster_appearance;
+      mon.monster_clear = level_data[mon.y][mon.x].type;
+      if(level_data[mon.y][mon.x].seen)
+        set_char(mon.x, mon.y, mon.monster_appearance);
       break;
     }
     else

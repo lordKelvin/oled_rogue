@@ -1,7 +1,7 @@
-// #include <U8glibmin.h>
 #include "sh1106_i2c.h"
 #include "config.h"
 #include "monsters.h"
+#include "cell.h"
 
 // TODO: input string (name)
 // TODO: save current state
@@ -23,7 +23,8 @@ MyButtons buttons_previous;
 MyButtons buttons_states = {false, false, false, false, false, false, false, false};
 unsigned long timeout;
 bool power_save = false;
-int shake = 0;
+uint8_t shake = 0;
+bool shake_up = false;
 
 /* Menu: start */
 enum PlayerClass {
@@ -40,21 +41,21 @@ const char *stat_names[] = {"Strength", "Intelligence", "Agility", NULL};
 enum PlayerStates {
   PS_Menu = 0,
   PS_Game,
-  PS_Inventory, // TODO: Win scene
+  PS_Inventory,
   PS_Lose,
-  PS_Win,
+  PS_Win, // TODO: Win scene
   PS_Levelup,
+  PS_Nothing,
 } player_state = PS_Menu;
 
 int player_class;
-char player_clear;
+enum CellTypes player_clear; // TODO: take this info from the map
 int x, y, hp, maxhp, xp = 0, maxxp = 1, xptier = 1;
 int Strength, Intelligence, Agility;
 int dungeon_level = 0;
 /* Player: finish */
 
-char level[LEVEL_V][LEVEL_H];
-char view[LEVEL_V][LEVEL_H + 1];
+cell level_data[LEVEL_V][LEVEL_H];
 
 // U8GLIB_SH1106_128X64 u8g(U8G_I2C_OPT_FAST); // I2C / TWI 1.3
 
@@ -70,13 +71,12 @@ void eller()
   {
     for(int c = 0; c < LEVEL_H; c++)
     {
+      level_data[r][c].seen = 0;
       if(r % 2 == 1 || c % 2 == 0)
-        level[r][c] = '#';
+        level_data[r][c].type = CT_Wall;
       else
-        level[r][c] = '.';
-      view[r][c] = ' ';
+        level_data[r][c].type = CT_Floor;
     }
-    view[r][LEVEL_H] = '\0';
   }
 
   for(int r = 0; r < LEVEL_V / 2 - 1; r++) // Generate each row of the maze excluding the last
@@ -90,7 +90,7 @@ void eller()
         R[c] = c + 1; // Link c to c + 1
         L[c + 1] = c;
 
-        level[r * 2][c * 2 + 2] = '.';
+        level_data[r * 2][c * 2 + 2].type = CT_Floor;
       }
 
       if(c != R[c] && random(2) == 0) // Should we connect this cell and its neighbour below?
@@ -100,7 +100,7 @@ void eller()
         R[c] = c; // Link c to c
         L[c] = c;
       } else {
-        level[r * 2 + 1][c * 2 + 1] = '.';
+        level_data[r * 2 + 1][c * 2 + 1].type = CT_Floor;
       }
     }
   }
@@ -114,7 +114,7 @@ void eller()
       R[c] = c + 1; // Link c to c + 1
       L[c + 1] = c;
 
-      level[(LEVEL_V / 2 - 1) * 2][c * 2 + 2] = '.';
+      level_data[(LEVEL_V / 2 - 1) * 2][c * 2 + 2].type = CT_Floor;
     }
 
     R[L[c]] = R[c]; // Link L[c] to R[c]
@@ -125,19 +125,20 @@ void eller()
 
 void newlevel(void)
 {
+  clear_screen();
   eller();
   if(monster_count < MAX_MONSTERS - 1)
     monster_count++;
   x = random(LEVEL_H / 2) * 2 + 1;
   y = random(LEVEL_V / 2) * 2;
-  level[random(LEVEL_V / 2) * 2][random(LEVEL_H / 2) * 2 + 1] = '>';
-  player_clear = level[y][x];
-  level[y][x] = '@';
-  generate_monsters();
+  level_data[random(LEVEL_V / 2) * 2][random(LEVEL_H / 2) * 2 + 1].type = CT_Exit;
+  player_clear = level_data[y][x].type;
   show();
+  set_char(x, y, '@');
+  generate_monsters();
 }
 
-#define DEBUG
+//#define DEBUG
 
 #ifdef DEBUG
   #define PRINT_VAR(x) (Serial.print(#x " = "), Serial.println(x))
@@ -149,15 +150,18 @@ void newlevel(void)
 
 void setup(void)
 {
+  #ifdef DEBUG
   Serial.begin(9600);
+  #endif
   PRINT_VAR(F_CPU);
   PRINT_EXPR("f_scl", F_CPU / (16 + 2 * TWBR * (int)(pow(4, (TWSR & 3)))));
   PRINT_VAR(TWBR);
   PRINT_VAR(TWSR);
   PRINT_VAR(TWPS0);
   PRINT_VAR(TWPS1);
+  PRINT_EXPR("sizeof(cell)", sizeof(cell));
 
-  randomSeed(analogRead(0));
+  randomSeed(analogRead(0) ^ millis());
   DDRD &= ~0b11111100; PORTD |= 0b11111100; // set digital pin 2-7 as INPUT_PULLUP
   DDRB &= ~0b00000011; PORTB |= 0b00000011; // set digital pin 8-9 as INPUT_PULLUP
 
@@ -177,7 +181,12 @@ bool is_empty(int x, int y)
   if(x < 0 || y < 0 || x >= LEVEL_H || y >= LEVEL_V)
     return false;
 
-  return (level[y][x] == '.' || level[y][x] == '>');
+  return (level_data[y][x].type == CT_Floor || level_data[y][x].type == CT_Exit); // TODO: use flags
+}
+
+void print_stats()
+{
+  set_printf(0, LEVEL_V - 1, "%d (%d, %d, %d) %d/%d [%d]", hp, Strength, Intelligence, Agility, xp, maxxp, dungeon_level);
 }
 
 void show(void)
@@ -189,33 +198,39 @@ void show(void)
     if(py > y) tmpy--;
     for(int px = max(x - 2, 0); px < min(x + 2 + 1, LEVEL_H); px++)
     {
+      if(level_data[py][px].seen)
+        continue;
       if(px == x - 2 || px == x + 2 || py == y - 2 || py == y + 2)
       {
         int tmpx = px;
         if(px < x) tmpx++;
         if(px > x) tmpx--;
         if(is_empty(tmpx, tmpy))
-          view[py][px] = level[py][px];
+        {
+          set_char(px, py, celltype_to_char[level_data[py][px].type]);
+          level_data[py][px].seen = 1;
+        }
       }
       else
       {
-        view[py][px] = level[py][px];
+        set_char(px, py, celltype_to_char[level_data[py][px].type]);
+        level_data[py][px].seen = 1;
       }
     }
   }
-  sprintf(view[LEVEL_V - 1], "%d (%d, %d, %d) %d/%d [%d]", hp, Strength, Intelligence, Agility, xp, maxxp, dungeon_level);
+  print_stats();
 }
 
 void move(int dx, int dy)
 {
   if(is_empty(x + dx, y + dy))
   {
-    level[y][x] = player_clear;
+    set_char(x, y, celltype_to_char[player_clear]);
     x += dx;
     y += dy;
-    player_clear = level[y][x];
-    level[y][x] = '@';
+    player_clear = level_data[y][x].type;
     show();
+    set_char(x, y, '@');
   }
   monsters_step();
 }
@@ -227,14 +242,14 @@ int question(const char **options, bool sub_item, bool add_item, bool confirm)
   {
     current_item = 0;
     for(count = 0; options[count]; count++)
-      strcpy(view[count] + 1, options[count]);
+      set_string(1, count, options[count]);
   }
   if(sub_item && current_item > 0)
     current_item--;
   if(add_item && current_item < count - 1)
     current_item++;
   for(int i = 0; i < count; i++)
-    view[i][0] = (current_item == i ? '>' : ' ');
+    set_char(0, i, (current_item == i ? '>' : ' '));
   if(confirm)
   {
     count = -1;
@@ -271,19 +286,19 @@ void loop(void)
 
   {
     unsigned long current_time = millis();
-    if(trigger_left || trigger_up || trigger_right || trigger_down || trigger_left || trigger_up || trigger_right || trigger_down)
+    if(trigger_left || trigger_up || trigger_right || trigger_down || trigger_a || trigger_b || trigger_x || trigger_y)
     {
       if(power_save)
       {
         power_save = false;
-//        u8g.sleepOff();
+        display_toggle(true);
       }
       timeout = current_time;
     }
     else if(current_time - timeout > SCREENSAVER_TIMEOUT_MS)
     {
       power_save = true;
-//      u8g.sleepOn();
+      display_toggle(false);
     }
   }
 
@@ -311,7 +326,7 @@ void loop(void)
     break;
   case PS_Game:
     if(trigger_a) {
-      if(player_clear == '>')
+      if(player_clear == CT_Exit)
       {
         dungeon_level++;
         if(xp >= maxxp)
@@ -319,6 +334,8 @@ void loop(void)
           xptier++;
           maxxp += xptier;
           player_state = PS_Levelup;
+          clear_screen();
+          print_stats();
         }
         else
           newlevel();
@@ -326,15 +343,21 @@ void loop(void)
     }
     if(trigger_b) {
       for(int y = 0; y < LEVEL_V - 1; y++)
-        memcpy(view[y], level[y], LEVEL_H);
+      {
+        for(int x = 0; x < LEVEL_H; x++)
+        {
+          level_data[y][x].seen = 1;
+          set_char(x, y, celltype_to_char[level_data[y][x].type]);
+        }
+      }
     }
     if(trigger_x) {
       dungeon_level++;
       newlevel();
     }
-//    if(trigger_y) {
-//      u8g.sleepOn();
-//    }
+    if(trigger_y) {
+      display_toggle(false);
+    }
     if(trigger_left) {
       move(-1, 0);
     }
@@ -349,12 +372,14 @@ void loop(void)
     }
     break;
   case PS_Lose:
-    sprintf(view[0], "You lost your life");
-    sprintf(view[1], " on %d-%s level of", dungeon_level, (dungeon_level == 1 ? "st" : (dungeon_level == 2 ? "nd" : (dungeon_level == 3 ? "rd" : "th"))));
-    sprintf(view[2], " gloomy dungeon");
-    sprintf(view[3], " scoring %d", xp);
-    sprintf(view[4], " expirience points.");
-    view[5][0] = view[6][0] = view[7][0] = '\0';
+    clear_screen();
+    set_printf(0, 0, "You lost your life");
+    set_printf(0, 1, " on %d-%s level of", dungeon_level, (dungeon_level == 1 ? "st" : (dungeon_level == 2 ? "nd" : (dungeon_level == 3 ? "rd" : "th"))));
+    set_printf(0, 2, " gloomy dungeon");
+    set_printf(0, 3, " scoring %d", xp);
+    set_printf(0, 4, " expirience points.");
+    print_stats();
+    player_state = PS_Nothing;
     break;
   case PS_Levelup:
     current_menu = question(stat_names, trigger_up, trigger_down, trigger_a);
@@ -376,7 +401,7 @@ void loop(void)
       {
         xptier++;
         maxxp += xptier;
-        sprintf(view[LEVEL_V - 1], "%d (%d, %d, %d) %d/%d [%d]", hp, Strength, Intelligence, Agility, xp, maxxp, dungeon_level); // TODO: create function
+        print_stats();
       }
       else
       {
@@ -385,36 +410,26 @@ void loop(void)
       }
     }
     break;
+  case PS_Nothing:
+    break;
   }
 
-//  int n = 0;
-//  u8g.firstPage();
-//
-//  do {
-//    u8g.drawStr(0, n * 8 + 7, view[n]);
-//    n++;
-//  } while(u8g.nextPage());
-  for(uint8_t y = 0; y < 8; y++)
-  {
-    i2c_start();
-    i2c_send(SH1106_I2C_ADDRESS);
-    i2c_send(SH1106_COMMAND);
-    i2c_send(SH1106_COLUMN_LOW + 0);
-    i2c_send(SH1106_COLUMN_HIGH + 0);
-    i2c_send(0xB0 + y);
-    i2c_stop();
-    i2c_start();
-    i2c_send(SH1106_I2C_ADDRESS);
-    i2c_send(SH1106_DATA);
-    put_string(view[y]);
-    i2c_stop();
-  }
   if(shake)
   {
-    if(shake & 1)
+    if(millis() & 0x20)
+    {
+      if(shake_up)
+      {
+        shake_up = false;
+        shake--;
+      }
       set_scroll(0);
+    }
     else
+    {
+      if(!shake_up)
+        shake_up = true;
       set_scroll(2);
-    shake--;
+    }
   }
 }

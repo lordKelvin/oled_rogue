@@ -1,3 +1,4 @@
+#include "stdarg.h"
 #include "sh1106_i2c.h"
 
 #define F_SCL 400000L // SCL frequency
@@ -7,7 +8,6 @@
 void i2c_init()
 {
   // https://users.soe.ucsc.edu/~karplus/Arduino/libraries/i2c/i2c.cpp
-  // uint8_t prescale = 1 + TWPS0 * 2 + TWPS1 * 4;
   uint8_t prescale = ((1 + (TWSR & 3)) << 1);
   TWBR = ((F_CPU / F_SCL) - 16) >> prescale;
 }
@@ -20,6 +20,7 @@ void i2c_start()
 
 //  check if the start condition was successfully transmitted
 //  if((TWSR & 0xF8) != TW_START){ return false; }
+  // TODO: add i2c_send here, it's always used
 }
 
 void i2c_stop()
@@ -42,9 +43,9 @@ void display_init()
     SH1106_I2C_ADDRESS,
     SH1106_COMMAND,
     SH1106_POWER + 0, // displayOff
-    0x8D, 0x14, // Enable charge pump
+    SH1106_CHARGE_PUMP, 0x14, // Enable charge pump
     SH1106_RATIO_FREQUENCY, 0x80, // clockFrequency +15%
-    SH1106_PUMP_VOLTAGE + 2, //...... pumpVoltage0123
+    SH1106_PUMP_VOLTAGE + 2, //...... pumpVoltage 8V
     SH1106_LEFT_TO_RIGHT + 1, //...... segmentRemap
     SH1106_TOP_TO_BOTTOM + 8, //...... flipVertically
     // 0xDA, 0x12, // comConfiguration
@@ -63,7 +64,7 @@ void display_init()
 
 void clear_screen()
 {
-  for(uint8_t set_page = 0xB0; set_page < 0xB0 + 8; set_page++)
+  for(uint8_t set_page = SH1106_PAGE; set_page < SH1106_PAGE + 8; set_page++)
   {
     i2c_start();
     i2c_send(SH1106_I2C_ADDRESS);
@@ -82,35 +83,112 @@ void clear_screen()
   }
 }
 
-void put_char(const char chr)
+void set_scroll(uint8_t scroll)
 {
   i2c_start();
   i2c_send(SH1106_I2C_ADDRESS);
-  i2c_send(SH1106_DATA); // data
+  i2c_send(SH1106_COMMAND); // command
+  i2c_send(SH1106_START_LINE + scroll);
+  i2c_stop();
+}
+
+void set_char(const uint8_t x, const uint8_t y, const char chr)
+{
+  if(chr < ' ' || chr >= 128)
+    return;
+  // TODO: test x and y?
+  uint8_t xlo = (x * 5) & 0xF;
+  uint8_t xhi = (x * 5) >> 4;
+  i2c_start();
+  i2c_send(SH1106_I2C_ADDRESS);
+  i2c_send(SH1106_COMMAND);
+  i2c_send(SH1106_COLUMN_LOW + xlo);
+  i2c_send(SH1106_COLUMN_HIGH + xhi);
+  i2c_send(SH1106_PAGE + y);
+  i2c_stop();
+  i2c_start();
+  i2c_send(SH1106_I2C_ADDRESS);
+  i2c_send(SH1106_DATA);
   for(int i = 0; i < 5; i++)
     i2c_send(pgm_read_byte_near(font_5x8r + (chr - ' ') * 5 + i));
   i2c_stop();
 }
 
-void put_string(const char *str)
+// TODO: overflow
+void set_string(const uint8_t x, const uint8_t y, const char *str)
 {
-  for(const char *ptr = str; *ptr; ptr++)
-    put_char(*ptr);
-}
+  if(str[0] == '\0')
+    return;
+  set_char(x, y, str[0]);
 
-void set_scroll(signed char scroll)
-{
   i2c_start();
   i2c_send(SH1106_I2C_ADDRESS);
-  i2c_send(0x00); // command
-  i2c_send(0x40 + scroll);
+  i2c_send(SH1106_DATA);
+  for(const char *ptr = str + 1; *ptr; ptr++)
+    for(int i = 0; i < 5; i++)
+      i2c_send(pgm_read_byte_near(font_5x8r + (*ptr - ' ') * 5 + i));
   i2c_stop();
 }
 
-// // uint8_t i2c_read(bool isLastByte)
-// // {
-// //   if(isLastByte) TWCR = (1 << TWINT) | (1 << TWEN);
-// //   else TWCR = (1 << TWEA) | (1 << TWINT) | (1 << TWEN);
-// //   while(!(TWCR & (1 << TWINT)));
-// //   return TWDR;
-// // }
+void set_printf(uint8_t x, uint8_t y, const char* format, ...)
+{
+  char buf[LEVEL_H + 1];
+  va_list argptr;
+  va_start(argptr, format);
+  vsnprintf(buf, LEVEL_H + 1, format, argptr);
+  va_end(argptr);
+  set_string(x, y, buf);
+}
+
+uint8_t i2c_read()
+{
+  TWCR = (1 << TWEA) | (1 << TWINT) | (1 << TWEN);
+  while(!(TWCR & (1 << TWINT)));
+  return TWDR;
+}
+
+uint8_t i2c_read_stop()
+{
+  TWCR = (1 << TWINT) | (1 << TWEN);
+  while(!(TWCR & (1 << TWINT)));
+  return TWDR;
+}
+
+void display_toggle(int on)
+{
+  i2c_start();
+  i2c_send(SH1106_I2C_ADDRESS);
+  i2c_send(SH1106_COMMAND);
+  i2c_send(SH1106_POWER + on);
+  i2c_stop();
+}
+
+//// E2END: The last EEPROM address.
+//void eeprom_write(uint8_t *data, uint16_t len, uint16_t addr)
+//{
+//  if(len == 0)
+//    return;
+//  
+//  i2c_start();
+//  i2c_addr(EEPROM_I2C_ADDRESS << 1);
+//  i2c_send((uint8_t)(addr >> 8));
+//  i2c_send((uint8_t)(addr & 0xFF));
+//  for(uint16_t i = 0; i < len; i++)
+//    i2c_send(data[i]);
+//  i2c_stop();
+//}
+//
+//void eeprom_read(uint8_t *data, uint16_t len, uint16_t addr)
+//{
+//  if(len == 0)
+//    return;
+//
+//  i2c_start();
+//  i2c_addr(EEPROM_I2C_ADDRESS << 1);
+//  i2c_send((uint8_t)(addr >> 8));
+//  i2c_send((uint8_t)(addr & 0xFF));
+//  for(uint16_t i = 0; i < len - 1; i++)
+//    data[i] = i2c_read();
+//  data[len - 1] = i2c_read_stop();
+//  i2c_stop();
+//}
