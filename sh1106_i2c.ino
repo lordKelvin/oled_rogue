@@ -1,15 +1,15 @@
 #include "sh1106_i2c.h"
 
-#define F_SCL 888888UL // SCL frequency
-#define Prescaler 1
-#define TWBR_val ((((F_CPU / F_SCL) / Prescaler) - 16 ) / 2)
+#define F_SCL 400000L // SCL frequency
 
 // https://chipenable.ru/index.php/programming-avr/195-uchebnyy-kurs-avr-ispolzovaniya-twi-modulya-registry-ch2.html
 // http://arduino.ru/forum/programmirovanie/itg3205-problema-polucheniya-dannykh
 void i2c_init()
 {
-  // 16000000 / 100000UL
-  TWBR = (uint8_t)TWBR_val;
+  // https://users.soe.ucsc.edu/~karplus/Arduino/libraries/i2c/i2c.cpp
+  // uint8_t prescale = 1 + TWPS0 * 2 + TWPS1 * 4;
+  uint8_t prescale = ((1 + (TWSR & 3)) << 1);
+  TWBR = ((F_CPU / F_SCL) - 16) >> prescale;
 }
 
 void i2c_start()

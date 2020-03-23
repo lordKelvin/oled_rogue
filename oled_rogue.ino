@@ -7,6 +7,8 @@
 // TODO: save current state
 // TODO: It's SSD1306, not sh1106
 
+#define EEPROM_I2C_ADDRESS (0x50 << 1)
+
 struct MyButtons {
   unsigned int d2 : 1;
   unsigned int d3 : 1;
@@ -135,34 +137,39 @@ void newlevel(void)
   show();
 }
 
+#define DEBUG
+
+#ifdef DEBUG
+  #define PRINT_VAR(x) (Serial.print(#x " = "), Serial.println(x))
+  #define PRINT_EXPR(n, x) (Serial.print(n " = "), Serial.println(x))
+#else
+  #define PRINT_VAR(x)
+  #define PRINT_EXPR(n, x)
+#endif
+
 void setup(void)
 {
-//  Serial.begin(9600);
-//  Serial.print("F_CPU = ");
-//  Serial.println(F_CPU);
-//  Serial.print("TWBR = ");
-//  Serial.println(TWBR);
-//  Serial.print("TWSR = ");
-//  Serial.println(TWSR);
+  Serial.begin(9600);
+  PRINT_VAR(F_CPU);
+  PRINT_EXPR("f_scl", F_CPU / (16 + 2 * TWBR * (int)(pow(4, (TWSR & 3)))));
+  PRINT_VAR(TWBR);
+  PRINT_VAR(TWSR);
+  PRINT_VAR(TWPS0);
+  PRINT_VAR(TWPS1);
 
   randomSeed(analogRead(0));
   DDRD &= ~0b11111100; PORTD |= 0b11111100; // set digital pin 2-7 as INPUT_PULLUP
   DDRB &= ~0b00000011; PORTB |= 0b00000011; // set digital pin 8-9 as INPUT_PULLUP
-  // u8g.setFont(u8g_font_5x8r);
 
   delay(100);
   i2c_init();
   delay(100);
 
-//  Serial.print("TWBR = ");
-//  Serial.println(TWBR);
+  PRINT_VAR(TWBR);
 
   display_init();
   clear_screen();
   timeout = millis();
-//  #ifdef __AVR__
-//    Serial.println(__AVR__);
-//  #endif
 }
 
 bool is_empty(int x, int y)
