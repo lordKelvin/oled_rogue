@@ -163,32 +163,49 @@ void display_toggle(int on)
   i2c_stop();
 }
 
-//// E2END: The last EEPROM address.
-//void eeprom_write(uint8_t *data, uint16_t len, uint16_t addr)
-//{
+void EEPROM_WriteByte(uint8_t eeprom_device_address, uint16_t eeprom_address, uint8_t value)
+{
+  i2c_start();
+  i2c_send(eeprom_device_address << 1);
+//  i2c_start_addr(eeprom_device_address << 1);
+  i2c_send((uint8_t)(eeprom_address >> 8));
+  i2c_send((uint8_t)(eeprom_address & 0xFF));
+  i2c_send(value);
+  i2c_stop();
+  delay(10);
+}
+
+// E2END: The last EEPROM address.
+void eeprom_write(uint8_t *data, uint16_t len, uint16_t addr)
+{
 //  if(len == 0)
 //    return;
 //  
 //  i2c_start();
-//  i2c_addr(EEPROM_I2C_ADDRESS << 1);
+//  // i2c_addr(EEPROM_I2C_ADDRESS << 1);
+//  i2c_send(EEPROM_I2C_ADDRESS << 1);
 //  i2c_send((uint8_t)(addr >> 8));
 //  i2c_send((uint8_t)(addr & 0xFF));
 //  for(uint16_t i = 0; i < len; i++)
 //    i2c_send(data[i]);
 //  i2c_stop();
-//}
-//
-//void eeprom_read(uint8_t *data, uint16_t len, uint16_t addr)
-//{
-//  if(len == 0)
-//    return;
-//
-//  i2c_start();
-//  i2c_addr(EEPROM_I2C_ADDRESS << 1);
-//  i2c_send((uint8_t)(addr >> 8));
-//  i2c_send((uint8_t)(addr & 0xFF));
-//  for(uint16_t i = 0; i < len - 1; i++)
-//    data[i] = i2c_read();
-//  data[len - 1] = i2c_read_stop();
-//  i2c_stop();
-//}
+//  delay(10);
+  for(uint16_t i = 0; i < len; i++)
+    EEPROM_WriteByte(EEPROM_I2C_ADDRESS, addr + i, data[i]);
+}
+
+void eeprom_read(uint8_t *data, uint16_t len, uint16_t addr)
+{
+  if(len == 0)
+    return;
+
+  i2c_start();
+  // i2c_addr(EEPROM_I2C_ADDRESS << 1);
+  i2c_send(EEPROM_I2C_ADDRESS << 1);
+  i2c_send((uint8_t)(addr >> 8));
+  i2c_send((uint8_t)(addr & 0xFF));
+  for(uint16_t i = 0; i < len - 1; i++)
+    data[i] = i2c_read();
+  data[len - 1] = i2c_read_stop();
+  i2c_stop();
+}

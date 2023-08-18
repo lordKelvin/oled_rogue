@@ -50,14 +50,83 @@ enum PlayerStates {
 
 int player_class;
 enum CellTypes player_clear; // TODO: take this info from the map
-int x, y, hp, maxhp, xp = 0, maxxp = 1, xptier = 1;
+int x, y;
+int hp, maxhp, xp = 0, maxxp = 1, xptier = 1; // TODO: 16 bit variables + alter extern
 int Strength, Intelligence, Agility;
 int dungeon_level = 0;
 /* Player: finish */
 
 cell level_data[LEVEL_V][LEVEL_H];
 
-// U8GLIB_SH1106_128X64 u8g(U8G_I2C_OPT_FAST); // I2C / TWI 1.3
+void save()
+{
+  uint16_t addr = 0;
+  uint8_t player_data[] = {
+    1 // not dead
+  , player_class
+  , player_clear
+  , x
+  , y
+  , hp
+  , maxhp
+  , xp
+  , maxxp
+  , xptier
+  , Strength
+  , Intelligence
+  , Agility
+  , dungeon_level
+  , monster_count
+  };
+  eeprom_write(player_data, sizeof(player_data), addr);
+  delay(10);
+  addr += sizeof(player_data);
+  for(int cy = 0; cy < LEVEL_V; cy++)
+  {
+    eeprom_write((uint8_t *)level_data[y], LEVEL_H, addr);
+    delay(10);
+    addr += LEVEL_H;
+  }
+  eeprom_write((uint8_t *)monsters, sizeof(monsters) * sizeof(*monsters), addr);
+  delay(10);
+  addr += sizeof(monsters) * sizeof(*monsters);
+}
+
+uint8_t load()
+{
+  uint16_t addr = 0;
+  uint8_t player_data[15];
+  eeprom_read(player_data, sizeof(player_data), 0);
+  addr += sizeof(player_data);
+
+  if(player_data[0] != 1)
+    return 0;
+
+  player_class  = player_data[1];
+  player_clear  = player_data[2];
+  x             = player_data[3];
+  y             = player_data[4];
+  hp            = player_data[5];
+  maxhp         = player_data[6];
+  xp            = player_data[7];
+  maxxp         = player_data[8];
+  xptier        = player_data[9];
+  Strength      = player_data[10];
+  Intelligence  = player_data[11];
+  Agility       = player_data[12];
+  dungeon_level = player_data[13];
+  monster_count = player_data[14];
+
+  for(int cy = 0; cy < LEVEL_V; cy++)
+  {
+    eeprom_read((uint8_t *)level_data[y], LEVEL_H, addr);
+    addr += LEVEL_H;
+  }
+  eeprom_read((uint8_t *)monsters, sizeof(monsters) * sizeof(*monsters), addr);
+  addr += sizeof(monsters) * sizeof(*monsters);
+
+  return 1;
+}
 
 // https://bitbucket.org/eworoshow/maze/src/
 void eller()
@@ -138,7 +207,7 @@ void newlevel(void)
   generate_monsters();
 }
 
-//#define DEBUG
+#define DEBUG
 
 #ifdef DEBUG
   #define PRINT_VAR(x) (Serial.print(#x " = "), Serial.println(x))
@@ -159,9 +228,26 @@ void setup(void)
   PRINT_VAR(TWSR);
   PRINT_VAR(TWPS0);
   PRINT_VAR(TWPS1);
+  PRINT_VAR(SDA);
+  PRINT_VAR(SCL);
+  PRINT_VAR(TWEN);
+  PRINT_VAR(TWIE);
+  PRINT_VAR(TWEA);
+  PRINT_VAR(NOT_A_PIN);
+  PRINT_VAR(NOT_ON_TIMER);
   PRINT_EXPR("sizeof(cell)", sizeof(cell));
+  PRINT_EXPR("SDA_timer", digitalPinToTimer(SDA));
+  PRINT_EXPR("SDA_bit", digitalPinToBitMask(SDA));
+  PRINT_EXPR("SDA_port", digitalPinToPort(SDA));
+  PRINT_EXPR("SCL_timer", digitalPinToTimer(SCL));
+  PRINT_EXPR("SCL_bit", digitalPinToBitMask(SCL));
+  PRINT_EXPR("SCL_port", digitalPinToPort(SCL));
+  PRINT_EXPR("&TWSR", _SFR_ADDR(TWSR));
+  PRINT_EXPR("sizeof(TWSR)", sizeof(TWSR));
 
-  randomSeed(analogRead(0) ^ millis());
+
+
+  randomSeed(analogRead(0) ^ millis()); // TODO: micros() !!!
   DDRD &= ~0b11111100; PORTD |= 0b11111100; // set digital pin 2-7 as INPUT_PULLUP
   DDRB &= ~0b00000011; PORTB |= 0b00000011; // set digital pin 8-9 as INPUT_PULLUP
 
@@ -174,6 +260,8 @@ void setup(void)
   display_init();
   clear_screen();
   timeout = millis();
+  if(load() == 1)
+    player_state = PS_Game;
 }
 
 bool is_empty(int x, int y)
@@ -338,7 +426,10 @@ void loop(void)
           print_stats();
         }
         else
+        {
           newlevel();
+          save();
+        }
       }
     }
     if(trigger_b) {
@@ -407,6 +498,7 @@ void loop(void)
       {
         player_state = PS_Game;
         newlevel();
+        save();
       }
     }
     break;
